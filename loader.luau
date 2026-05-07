@@ -5,7 +5,7 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [1] 초기화 (중복 방지)
+-- [1] 초기화
 if CoreGui:FindFirstChild("NamelessHub") then CoreGui.NamelessHub:Destroy() end
 if CoreGui:FindFirstChild("NamelessToggle") then CoreGui.NamelessToggle:Destroy() end
 
@@ -18,7 +18,7 @@ _G.FlyEnabled = false
 _G.Noclip = false
 _G.InfJump = false
 
--- [2] 메인 UI 생성
+-- [2] UI 프레임 생성
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
 ScreenGui.Name = "NamelessHub"
 
@@ -77,7 +77,7 @@ local function AddTab(name)
     return Container
 end
 
--- [5] 기능 추가용 유틸 (Toggle, Slider)
+-- [5] 토글 & 슬라이더 (v1 스타일)
 local function AddToggle(parent, text, callback)
     local Frame = Instance.new("TextButton", parent)
     Frame.Size = UDim2.new(1, 0, 0, 30)
@@ -131,7 +131,7 @@ local function AddSlider(parent, text, min, max, callback)
     end)
 end
 
--- [6] 탭 배치 및 기능 연결
+-- [6] 탭 배치
 local Main = AddTab("Main")
 local ESPTab = AddTab("ESP")
 local Misc = AddTab("Misc")
@@ -142,18 +142,17 @@ UI.Tabs["Main"].TextColor3 = Color3.fromRGB(0, 170, 255)
 
 AddToggle(Main, "Silent Aim Enabled", function(v) _G.SilentAim = v end)
 AddToggle(Main, "Wallbang Enabled", function(v) _G.Wallbang = v end)
-
 AddToggle(ESPTab, "Box ESP", function(v) _G.ESPEnabled = v end)
 
-AddSlider(Misc, "WalkSpeed", 16, 200, function(v) _G.WalkSpeed = v end)
+AddSlider(Misc, "WalkSpeed", 16, 300, function(v) _G.WalkSpeed = v end)
 AddToggle(Misc, "Fly Enabled", function(v) _G.FlyEnabled = v end)
 AddToggle(Misc, "Noclip Enabled", function(v) _G.Noclip = v end)
 AddToggle(Misc, "Infinite Jump", function(v) _G.InfJump = v end)
 
--- [7] 핵심 로직 엔진 (Silent Aim & Utility)
+-- [7] 다른 핵에서 가져온 강력한 엔진 (Silent Aim & 이동)
 
-local function GetClosestTarget()
-    local target, dist = nil, math.huge
+local function GetTarget()
+    local target, dist = nil, 2000
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
             local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
@@ -166,47 +165,57 @@ local function GetClosestTarget()
     return target
 end
 
--- Silent Aim (Raycast Hook) - 시야 고정 없이 총알만 꺾임
+-- 고성능 Silent Aim (Raycast Hooking)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     if _G.SilentAim and method == "Raycast" and not checkcaller() then
-        local t = GetClosestTarget()
+        local t = GetTarget()
         if t and t.Character then
-            -- 총알의 방향(Direction)을 타겟의 머리로 덮어씌움
+            -- 총알의 방향을 타겟 머리로 강제 고정 (시점 영향 X)
             args[2] = (t.Character.Head.Position - args[1]).Unit * 1000
-            
-            if _G.Wallbang and args[3] then
-                args[3].FilterDescendantsInstances = {t.Character}
-                args[3].FilterType = Enum.RaycastFilterType.Include
-            end
             return oldNamecall(self, unpack(args))
         end
     end
     return oldNamecall(self, ...)
 end)
 
--- 이동, 비행, ESP 루프
-RunService.Stepped:Connect(function()
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChild("Humanoid") then
-        char.Humanoid.WalkSpeed = _G.WalkSpeed
+-- 이동 관련 (Velocity 기반 강제 이동)
+RunService.Heartbeat:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        local hum = LocalPlayer.Character.Humanoid
         
-        -- Fly 로직
-        if _G.FlyEnabled then
-            char.PrimaryPart.Velocity = Vector3.new(0, 2, 0) -- 중력 무시하고 떠있기
+        -- WalkSpeed 강제 주입
+        if _G.WalkSpeed > 16 then
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude > 0 then
+                hrp.CFrame = hrp.CFrame + (moveDir * (_G.WalkSpeed / 100))
+            end
         end
 
-        -- Noclip 로직
+        -- Fly (안정적인 위치 고정 방식)
+        if _G.FlyEnabled then
+            hrp.Velocity = Vector3.new(0, 0, 0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                hrp.CFrame = hrp.CFrame * CFrame.new(0, 1, 0)
+            elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                hrp.CFrame = hrp.CFrame * CFrame.new(0, -1, 0)
+            end
+        end
+
+        -- Noclip
         if _G.Noclip then
-            for _, p in pairs(char:GetDescendants()) do
-                if p:IsA("BasePart") then p.CanCollide = false end
+            for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide = false end
             end
         end
     end
+end)
 
-    -- ESP 로직
+-- ESP & Jump
+RunService.RenderStepped:Connect(function()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local hl = p.Character:FindFirstChild("NamelessESP")
@@ -217,22 +226,15 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Infinite Jump 고정
 UserInputService.JumpRequest:Connect(function()
     if _G.InfJump and LocalPlayer.Character then
-        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+        LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
     end
 end)
 
--- 모바일 메뉴 버튼
+-- 메뉴 버튼
 local OpenBtn = Instance.new("TextButton", Instance.new("ScreenGui", CoreGui))
 OpenBtn.Size = UDim2.new(0, 50, 0, 50)
 OpenBtn.Position = UDim2.new(0, 10, 0.4, 0)
-OpenBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-OpenBtn.BorderSizePixel = 1
-OpenBtn.BorderColor3 = Color3.fromRGB(0, 170, 255)
-OpenBtn.Text = "Menu"
-OpenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-OpenBtn.Draggable = true
+OpenBtn.Text = "Menu"; OpenBtn.Draggable = true
 OpenBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
