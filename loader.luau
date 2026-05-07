@@ -5,21 +5,28 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [1] 중복 실행 방지
+-- [1] 기존 UI 제거
 if CoreGui:FindFirstChild("NamelessHub") then CoreGui.NamelessHub:Destroy() end
 if CoreGui:FindFirstChild("NamelessToggle") then CoreGui.NamelessToggle:Destroy() end
 
 local UI = { Tabs = {}, Containers = {}, CurrentTab = nil, IsOpen = true }
 
--- [2] 메인 UI 프레임 (아까 잘 뜨던 그 구조)
+-- 전역 변수 초기화
+_G.FlyEnabled = false
+_G.Noclip = false
+_G.InfJump = false
+_G.Aimbot = false
+_G.SilentAim = false
+
+-- [2] 메인 UI 생성
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "NamelessHub"
 ScreenGui.Parent = CoreGui
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 480, 0, 360)
-MainFrame.Position = UDim2.new(0.5, -240, 0.5, -180)
+MainFrame.Size = UDim2.new(0, 480, 0, 380)
+MainFrame.Position = UDim2.new(0.5, -240, 0.5, -190)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 MainFrame.BorderSizePixel = 1
 MainFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
@@ -27,7 +34,7 @@ MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 
--- [3] 메뉴 열기/닫기 버튼 (모바일 필수)
+-- [3] 모바일 메뉴 버튼
 local ToggleGui = Instance.new("ScreenGui")
 ToggleGui.Name = "NamelessToggle"
 ToggleGui.Parent = CoreGui
@@ -40,6 +47,8 @@ OpenBtn.BorderSizePixel = 1
 OpenBtn.BorderColor3 = Color3.fromRGB(0, 170, 255)
 OpenBtn.Text = "Menu"
 OpenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+OpenBtn.Font = Enum.Font.Code
+OpenBtn.TextSize = 12
 OpenBtn.Draggable = true
 OpenBtn.Parent = ToggleGui
 
@@ -48,7 +57,7 @@ OpenBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = UI.IsOpen
 end)
 
--- [4] 탭 시스템 설정
+-- [4] 상단바 및 탭 시스템
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 30)
 Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
@@ -64,10 +73,10 @@ TabBar.Position = UDim2.new(0, 0, 0, 30)
 TabBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 TabBar.Parent = MainFrame
 
-local TabListLayout = Instance.new("UIListLayout")
-TabListLayout.FillDirection = Enum.FillDirection.Horizontal
-TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-TabListLayout.Parent = TabBar
+local TabList = Instance.new("UIListLayout")
+TabList.FillDirection = Enum.FillDirection.Horizontal
+TabList.SortOrder = Enum.SortOrder.LayoutOrder
+TabList.Parent = TabBar
 
 local function AddTab(name)
     local btn = Instance.new("TextButton")
@@ -84,6 +93,7 @@ local function AddTab(name)
     Container.BackgroundTransparency = 1
     Container.Visible = false
     Container.ScrollBarThickness = 2
+    Container.CanvasSize = UDim2.new(0,0,2,0)
     Container.Parent = MainFrame
 
     local Layout = Instance.new("UIListLayout")
@@ -137,21 +147,25 @@ local function AddToggle(parent, text, callback)
     end)
 end
 
--- [5] 메뉴 구성 (요청하신 탭들)
+-- [5] 탭 생성 및 기능 배치
 local Main = AddTab("Main")
 local World = AddTab("World")
 local ESP = AddTab("ESP")
 local Visuals = AddTab("Visuals")
-local Character = AddTab("Character")
+local Char = AddTab("Character")
 local Misc = AddTab("Misc")
 local Settings = AddTab("Settings")
 
--- Misc 탭에 이동 기능 배치
+-- Main 기능
+AddToggle(Main, "Aimbot Enabled", function(v) _G.Aimbot = v end)
+AddToggle(Main, "Silent Aim Enabled", function(v) _G.SilentAim = v end)
+
+-- Misc 기능 (요청하신 기능들)
 AddToggle(Misc, "Fly (비행)", function(v) _G.FlyEnabled = v end)
 AddToggle(Misc, "Noclip (벽 통과)", function(v) _G.Noclip = v end)
 AddToggle(Misc, "Infinite Jump", function(v) _G.InfJump = v end)
 
--- [6] 핵심 기능 엔진 (Fly, Noclip, InfJump)
+-- [6] 핵심 기능 엔진 루프
 local Speed = 50
 RunService.Stepped:Connect(function()
     if not LocalPlayer.Character then return end
@@ -163,7 +177,7 @@ RunService.Stepped:Connect(function()
         end
     end
     
-    -- Fly 로직
+    -- Fly 로직 (카메라 방향 비행)
     if _G.FlyEnabled then
         local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if root then
@@ -173,21 +187,20 @@ RunService.Stepped:Connect(function()
             if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Camera.CFrame.RightVector end
             root.Velocity = moveDir * Speed
-            root.Anchored = false -- 비행 중엔 물리 적용
         end
     end
 end)
 
+-- 무한 점프 (Rivals 이단점프 로직 대응)
 UserInputService.JumpRequest:Connect(function()
     if _G.InfJump and LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then 
+        local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hum and root then 
             hum:ChangeState(Enum.HumanoidStateType.Jumping)
-            -- 이단 점프 로직 보정
-            local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if root then root.Velocity = Vector3.new(root.Velocity.X, 50, root.Velocity.Z) end
+            root.Velocity = Vector3.new(root.Velocity.X, 50, root.Velocity.Z)
         end
     end
 end)
 
-print("Nameless Hub v1 정식 가동!")
+print("Nameless Hub v1: 모든 기능이 Misc 탭에 통합되었습니다.")
