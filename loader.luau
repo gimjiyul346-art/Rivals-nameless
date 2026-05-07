@@ -1,113 +1,153 @@
 -- [[ Nameless hub | v1 ]] --
-repeat task.wait() until game:IsLoaded()
-
--- 로컬 참조 및 최적화
 local cloneref = cloneref or function(o) return o end
+local CoreGui = cloneref(game:GetService("CoreGui"))
 local Players = cloneref(game:GetService("Players"))
 local RunService = cloneref(game:GetService("RunService"))
 local UserInputService = cloneref(game:GetService("UserInputService"))
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
-local Camera = workspace.CurrentCamera
 
--- 설정 변수
+-- 중복 실행 방지
+if CoreGui:FindFirstChild("NamelessUI") then CoreGui.NamelessUI:Destroy() end
+
+-- 설정값
 getgenv().Config = {
-    Aimbot = false,
-    SilentAim = false,
-    WalkSpeed = 16,
-    JumpPower = 50,
-    InfiniteJump = false,
-    Fly = false,
-    FlySpeed = 50,
-    NoClip = false,
-    ESP_Enabled = false
+    Aimbot = false, SilentAim = false,
+    WalkSpeed = 16, JumpPower = 50, InfJump = false,
+    Fly = false, NoClip = false, ESP = false
 }
 
--- [[ UI 라이브러리 초기화 ]] --
--- (제공해주신 UI 엔진의 핵심 로직을 Nameless hub 이름으로 재구성)
-local Library = {
-    Title = "Nameless hub | v1",
-    Tabs = {},
-    Open = true
-}
+-- [[ UI 생성 ]] --
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+ScreenGui.Name = "NamelessUI"
 
--- 메뉴 열고 닫기 (Insert 키)
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if not gpe and input.KeyCode == Enum.KeyCode.Insert then
-        Library.Open = not Library.Open
-        -- 여기에 프레임 Visible 트윈 로직 추가
-    end
-end)
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 550, 0, 350)
+MainFrame.Position = UDim2.new(0.5, -275, 0.5, -175)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BorderSizePixel = 0
 
--- [[ 핵심 기능 로직 ]] --
+-- 테두리 (사진 느낌)
+local Stroke = Instance.new("UIStroke", MainFrame)
+Stroke.Color = Color3.fromRGB(0, 170, 255)
+Stroke.Thickness = 1.5
 
--- 1. Silent Aim & Aimbot 대상 찾기
-local function GetClosestPlayer()
-    local closest, dist = nil, math.huge
-    for _, v in pairs(Players:GetPlayers()) do
-        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-            local pos, onScreen = Camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
-            if onScreen then
-                local magnitude = (Vector2.new(pos.X, pos.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
-                if magnitude < dist then
-                    closest = v
-                    dist = magnitude
-                end
-            end
-        end
-    end
-    return closest
+-- 상단 타이틀
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Title.Text = "  Nameless hub | v1"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.Code; Title.TextXAlignment = Enum.TextXAlignment.Left
+
+-- 탭 버튼 영역
+local TabHolder = Instance.new("Frame", MainFrame)
+TabHolder.Size = UDim2.new(0, 120, 1, -35)
+TabHolder.Position = UDim2.new(0, 0, 0, 35)
+TabHolder.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+
+local TabList = Instance.new("UIListLayout", TabHolder)
+TabList.Padding = UDim.new(0, 5)
+
+-- 페이지 영역
+local Container = Instance.new("Frame", MainFrame)
+Container.Size = UDim2.new(1, -130, 1, -45)
+Container.Position = UDim2.new(0, 125, 0, 40)
+Container.BackgroundTransparency = 1
+
+local Pages = {}
+local function CreateTab(Name)
+    local TabBtn = Instance.new("TextButton", TabHolder)
+    TabBtn.Size = UDim2.new(1, 0, 0, 30)
+    TabBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    TabBtn.Text = Name; TabBtn.TextColor3 = Color3.fromRGB(200, 200, 200); TabBtn.Font = Enum.Font.Code
+    
+    local Page = Instance.new("ScrollingFrame", Container)
+    Page.Size = UDim2.new(1, 0, 1, 0)
+    Page.BackgroundTransparency = 1; Page.Visible = false; Page.ScrollBarThickness = 0
+    Instance.new("UIListLayout", Page).Padding = UDim.new(0, 10)
+    
+    TabBtn.MouseButton1Click:Connect(function()
+        for _, p in pairs(Pages) do p.Visible = false end
+        Page.Visible = true
+    end)
+    Pages[Name] = Page
+    return Page
 end
 
--- 2. Character 기능 (Speed, Jump, Fly, NoClip)
+-- 기능 토글 함수
+local function AddToggle(Parent, Text, Var)
+    local Btn = Instance.new("TextButton", Parent)
+    Btn.Size = UDim2.new(1, -10, 0, 30)
+    Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Btn.Text = Text .. ": OFF"; Btn.TextColor3 = Color3.fromRGB(200, 200, 200); Btn.Font = Enum.Font.Code
+    Btn.MouseButton1Click:Connect(function()
+        getgenv().Config[Var] = not getgenv().Config[Var]
+        Btn.Text = Text .. ": " .. (getgenv().Config[Var] and "ON" or "OFF")
+        Btn.TextColor3 = getgenv().Config[Var] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(200, 200, 200)
+    end)
+end
+
+-- 탭 생성
+local MainTab = CreateTab("Main")
+local RageTab = CreateTab("Rage")
+local CharTab = CreateTab("Character")
+local MiscTab = CreateTab("Misc")
+local SettTab = CreateTab("Settings")
+
+-- 기능 추가
+AddToggle(MainTab, "Aimbot", "Aimbot")
+AddToggle(MainTab, "Silent Aim", "SilentAim")
+AddToggle(RageTab, "Fly Mode", "Fly")
+AddToggle(CharTab, "Infinite Jump", "InfJump")
+AddToggle(CharTab, "No Clip", "NoClip")
+AddToggle(MiscTab, "Player ESP", "ESP")
+
+-- [[ 기능 로직 ]] --
 RunService.Stepped:Connect(function()
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
         LocalPlayer.Character.Humanoid.WalkSpeed = getgenv().Config.WalkSpeed
-        
         if getgenv().Config.NoClip then
-            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = false end
+            for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide = false end
             end
+        end
+        if getgenv().Config.Fly then
+            LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0, 2, 0)
         end
     end
 end)
 
 UserInputService.JumpRequest:Connect(function()
-    if getgenv().Config.InfiniteJump and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+    if getgenv().Config.InfJump then
         LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
     end
 end)
 
--- [[ UI 구성 ]] --
--- Main 탭: Silent Aim, Aimbot
--- Rage 탭: Fly, High Speed
--- Character 탭: WalkSpeed, InfiniteJump, NoClip
--- Misc 탭: ESP
--- Settings 탭: UI Color, Config Save
-
--- (이하 생략된 1200줄의 UI 드로잉 코드는 원본의 안정적인 트윈 로직을 그대로 사용함)
-
--- 알림 메시지
-StarterGui:SetCore("SendNotification", {
-    Title = "Nameless hub | v1",
-    Text = "성공적으로 로드되었습니다! (Insert 키로 메뉴 열기)",
-    Duration = 5
-})
-
--- [[ Silent Aim 후킹 ]] --
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
-    if not checkcaller() and getgenv().Config.SilentAim and method == "FindPartOnRayWithIgnoreList" then
-        local target = GetClosestPlayer()
-        if target and target.Character and target.Character:FindFirstChild("Head") then
-            args[1] = Ray.new(Camera.CFrame.Position, (target.Character.Head.Position - Camera.CFrame.Position).Unit * 1000)
-            return oldNamecall(self, table.unpack(args))
-        end
+-- 메뉴 열기/닫기 (Insert 키)
+UserInputService.InputBegan:Connect(function(Key)
+    if Key.KeyCode == Enum.KeyCode.Insert then
+        MainFrame.Visible = not MainFrame.Visible
     end
-    return oldNamecall(self, ...)
 end)
 
--- 모든 탭과 버튼 생성 로직 실행...
-print("Nameless hub | v1 Loaded Successfully")
+-- 드래그 기능
+local dragging, dragInput, dragStart, startPos
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; dragStart = input.Position; startPos = MainFrame.Position end
+end)
+MainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
+
+Pages["Main"].Visible = true
+MainFrame.Draggable = true -- 구형 실행기 지원용
+
