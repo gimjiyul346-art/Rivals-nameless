@@ -1,125 +1,166 @@
--- [[ Misc 탭: 이동 기능 추가 ]] --
-AddToggle(Misc, "Fly (비행)", function(val)
-    _G.FlyEnabled = val
-    if val then StartFly() else StopFly() end
-end)
-
-AddToggle(Misc, "Noclip (벽 통과)", function(val)
-    _G.Noclip = val
-end)
-
--- [[ Main 탭: 에임봇 & 사일런트 세부 설정 ]] --
-AddSectionTitle(Main, "Aim Enhancement")
-AddToggle(Main, "Aimbot Enabled", function(val) _G.Aimbot = val end)
-AddToggle(Main, "Silent Aim Enabled", function(val) _G.SilentAim = val end)
-AddToggle(Main, "Show FOV Circle", function(val) 
-    _G.ShowFOV = val
-    if FOVCircle then FOVCircle.Visible = val end
-end)
-
------------------------------------------------------------
--- [[ 핵심 엔진 (코드 하단에 추가) ]] --
------------------------------------------------------------
-
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 
--- 1. Noclip (벽 통과) 로직
-RunService.Stepped:Connect(function()
-    if _G.Noclip and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
+-- [1] 중복 실행 방지 및 초기화
+if CoreGui:FindFirstChild("NamelessHub") then CoreGui.NamelessHub:Destroy() end
+if CoreGui:FindFirstChild("NamelessToggle") then CoreGui.NamelessToggle:Destroy() end
+
+local UI = { Tabs = {}, Containers = {}, CurrentTab = nil, IsOpen = true }
+_G.FlyEnabled = false
+_G.Noclip = false
+
+-- [2] 메인 UI 생성
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NamelessHub"
+ScreenGui.Parent = CoreGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 480, 0, 380)
+MainFrame.Position = UDim2.new(0.5, -240, 0.5, -190)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BorderSizePixel = 1
+MainFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+-- [3] 모바일 전용 메뉴 버튼 (Menu 버튼이 안 뜨면 안 되니까!)
+local ToggleGui = Instance.new("ScreenGui")
+ToggleGui.Name = "NamelessToggle"
+ToggleGui.Parent = CoreGui
+
+local OpenBtn = Instance.new("TextButton")
+OpenBtn.Size = UDim2.new(0, 50, 0, 50)
+OpenBtn.Position = UDim2.new(0, 10, 0.4, 0)
+OpenBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+OpenBtn.Text = "Menu"
+OpenBtn.TextColor3 = Color3.fromRGB(0, 170, 255)
+OpenBtn.Draggable = true
+OpenBtn.Parent = ToggleGui
+
+OpenBtn.MouseButton1Click:Connect(function()
+    UI.IsOpen = not UI.IsOpen
+    MainFrame.Visible = UI.IsOpen
 end)
 
--- 2. Fly (비행) 로직
-local BodyGyro, BodyVelocity
-function StartFly()
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    
-    BodyGyro = Instance.new("BodyGyro", root)
-    BodyGyro.P = 9e4
-    BodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
-    BodyGyro.cframe = root.CFrame
-    
-    BodyVelocity = Instance.new("BodyVelocity", root)
-    BodyVelocity.velocity = Vector3.new(0, 0, 0)
-    BodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
-    
-    task.spawn(function()
-        while _G.FlyEnabled do
-            local moveDir = Camera.CFrame.LookVector
-            if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.W) then
-                BodyVelocity.velocity = moveDir * 50
-            elseif game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.S) then
-                BodyVelocity.velocity = moveDir * -50
-            else
-                BodyVelocity.velocity = Vector3.new(0, 0, 0)
-            end
-            BodyGyro.cframe = Camera.CFrame
-            task.wait()
-        end
+-- [4] 상단바 및 탭 바
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Title.Text = "  Nameless hub | v1"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.Code
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = MainFrame
+
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, 0, 0, 30)
+TabBar.Position = UDim2.new(0, 0, 0, 30)
+TabBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+TabBar.Parent = MainFrame
+
+local TabList = Instance.new("UIListLayout")
+TabList.FillDirection = Enum.FillDirection.Horizontal
+TabList.SortOrder = Enum.SortOrder.LayoutOrder
+TabList.Parent = TabBar
+
+-- [5] 탭/기능 추가 함수
+local function AddTab(name)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 68, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = name:lower()
+    btn.TextColor3 = Color3.fromRGB(150, 150, 150)
+    btn.Font = Enum.Font.Code
+    btn.Parent = TabBar
+
+    local Container = Instance.new("ScrollingFrame")
+    Container.Size = UDim2.new(1, -10, 1, -70)
+    Container.Position = UDim2.new(0, 5, 0, 65)
+    Container.BackgroundTransparency = 1
+    Container.Visible = false
+    Container.ScrollBarThickness = 2
+    Container.Parent = MainFrame
+
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 5)
+    Layout.Parent = Container
+
+    btn.MouseButton1Click:Connect(function()
+        for _, c in pairs(UI.Containers) do c.Visible = false end
+        for _, b in pairs(UI.Tabs) do b.TextColor3 = Color3.fromRGB(150, 150, 150) end
+        Container.Visible = true
+        btn.TextColor3 = Color3.fromRGB(0, 170, 255)
+    end)
+
+    UI.Tabs[name] = btn
+    UI.Containers[name] = Container
+    if not UI.CurrentTab then btn.TextColor3 = Color3.fromRGB(0, 170, 255); Container.Visible = true; UI.CurrentTab = name end
+    return Container
+end
+
+local function AddToggle(parent, text, callback)
+    local Frame = Instance.new("TextButton")
+    Frame.Size = UDim2.new(1, 0, 0, 30)
+    Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    Frame.Text = ""
+    Frame.Parent = parent
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -40, 1, 0)
+    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.Text = text
+    Label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    Label.BackgroundTransparency = 1
+    Label.Font = Enum.Font.Code
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Frame
+
+    local Box = Instance.new("Frame")
+    Box.Size = UDim2.new(0, 18, 0, 18)
+    Box.Position = UDim2.new(1, -28, 0.5, -9)
+    Box.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    Box.Parent = Frame
+
+    local enabled = false
+    Frame.MouseButton1Click:Connect(function()
+        enabled = not enabled
+        Box.BackgroundColor3 = enabled and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(40, 40, 40)
+        callback(enabled)
     end)
 end
 
-function StopFly()
-    if BodyGyro then BodyGyro:Destroy() end
-    if BodyVelocity then BodyVelocity:Destroy() end
-end
+-- [6] 기능 배치
+local Main = AddTab("Main")
+local Misc = AddTab("Misc")
+AddTab("World"); AddTab("ESP"); AddTab("Visuals"); AddTab("Character"); AddTab("Settings")
 
--- 3. 고도화된 타겟팅 함수 (에임봇/사일런트 공용)
-local function GetClosestTarget()
-    local target = nil
-    local maxDist = _G.ShowFOV and 150 or math.huge -- FOV 사용시 거리 제한
-    
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
-            local head = p.Character.Head
-            local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
-            
-            if onScreen then
-                local mousePos = game:GetService("UserInputService"):GetMouseLocation()
-                local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
-                if dist < maxDist then
-                    target = p
-                    maxDist = dist
-                end
-            end
-        end
-    end
-    return target
-end
+AddToggle(Main, "Aimbot Enabled", function(v) _G.Aimbot = v end)
+AddToggle(Main, "Silent Aim Enabled", function(v) _G.SilentAim = v end)
 
--- 4. Aimbot (카메라 고정)
-RunService.RenderStepped:Connect(function()
-    if _G.Aimbot then
-        local target = GetClosestTarget()
-        if target and target.Character then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+AddToggle(Misc, "Fly (비행)", function(v) _G.FlyEnabled = v end)
+AddToggle(Misc, "Noclip (벽 통과)", function(v) _G.Noclip = v end)
+AddToggle(Misc, "Infinite Jump", function(v) _G.InfJump = v end)
+
+-- [7] 루프 엔진 (Noclip, Fly, Jump)
+RunService.Stepped:Connect(function()
+    if _G.Noclip and LocalPlayer.Character then
+        for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
         end
     end
 end)
 
--- 5. Silent Aim (Raycast Hook - 최신 방식)
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
-    
-    if _G.SilentAim and method == "Raycast" and not checkcaller() then
-        local target = GetClosestTarget()
-        if target and target.Character then
-            args[2] = (target.Character.Head.Position - args[1]).Unit * 1000
-            return oldNamecall(self, unpack(args))
-        end
+UserInputService.JumpRequest:Connect(function()
+    if _G.InfJump and LocalPlayer.Character then
+        local h = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
-    return oldNamecall(self, ...)
 end)
 
+print("Nameless Hub Loaded!")
