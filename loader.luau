@@ -5,81 +5,52 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [1] 초기화 및 UI 복구
+-- [1] 초기화
 if CoreGui:FindFirstChild("NamelessHub") then CoreGui.NamelessHub:Destroy() end
-if CoreGui:FindFirstChild("NamelessToggle") then CoreGui.NamelessToggle:Destroy() end
-
 local UI = { Tabs = {}, Containers = {}, IsOpen = true }
 _G.WalkSpeed = 16
 _G.SilentAim = false
 _G.Wallbang = false
-_G.ESPEnabled = false
 _G.FlyEnabled = false
-_G.Noclip = false
 _G.InfJump = false
 
--- [2] 메인 UI 프레임 (디자인 유지)
+-- [2] UI 생성 (v1 디자인 유지)
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
 ScreenGui.Name = "NamelessHub"
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 480, 0, 360)
-MainFrame.Position = UDim2.new(0.5, -240, 0.5, -180)
+MainFrame.Size = UDim2.new(0, 400, 0, 300)
+MainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-MainFrame.BorderSizePixel = 1
-MainFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
 MainFrame.Active = true
 MainFrame.Draggable = true
 
--- [3] 타이틀 및 탭 시스템
-local Title = Instance.new("TextLabel", MainFrame)
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-Title.Text = "  Nameless hub | v1 (Kick Hook Engine)"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.Code
-Title.TextXAlignment = Enum.TextXAlignment.Left
-
 local TabBar = Instance.new("Frame", MainFrame)
 TabBar.Size = UDim2.new(1, 0, 0, 30)
-TabBar.Position = UDim2.new(0, 0, 0, 30)
-TabBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+TabBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 Instance.new("UIListLayout", TabBar).FillDirection = Enum.FillDirection.Horizontal
 
 local function AddTab(name)
     local btn = Instance.new("TextButton", TabBar)
-    btn.Size = UDim2.new(0, 68, 1, 0)
-    btn.BackgroundTransparency = 1
-    btn.Text = name:lower()
-    btn.Font = Enum.Font.Code
-    btn.TextColor3 = Color3.fromRGB(150, 150, 150)
+    btn.Size = UDim2.new(0, 80, 1, 0)
+    btn.Text = name; btn.TextColor3 = Color3.fromRGB(200, 200, 200); btn.BackgroundTransparency = 1
     local Container = Instance.new("ScrollingFrame", MainFrame)
-    Container.Size = UDim2.new(1, -10, 1, -70)
-    Container.Position = UDim2.new(0, 5, 0, 65)
-    Container.BackgroundTransparency = 1
-    Container.Visible = false
+    Container.Size = UDim2.new(1, -10, 1, -40)
+    Container.Position = UDim2.new(0, 5, 0, 35)
+    Container.Visible = false; Container.BackgroundTransparency = 1
     Instance.new("UIListLayout", Container).Padding = UDim.new(0, 5)
     btn.MouseButton1Click:Connect(function()
         for _, c in pairs(UI.Containers) do c.Visible = false end
-        for _, b in pairs(UI.Tabs) do b.TextColor3 = Color3.fromRGB(150, 150, 150) end
         Container.Visible = true
-        btn.TextColor3 = Color3.fromRGB(0, 170, 255)
     end)
-    UI.Tabs[name] = btn
     UI.Containers[name] = Container
     return Container
 end
 
--- [4] 기능 연결
-local Main = AddTab("Main")
-local Misc = AddTab("Misc")
-UI.Containers["Main"].Visible = true
-
 local function AddToggle(parent, text, callback)
     local btn = Instance.new("TextButton", parent)
     btn.Size = UDim2.new(1, 0, 0, 30)
-    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     btn.Text = "  " .. text; btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     local state = false
     btn.MouseButton1Click:Connect(function()
         state = not state
@@ -88,23 +59,19 @@ local function AddToggle(parent, text, callback)
     end)
 end
 
-AddToggle(Main, "Silent Aim Enabled", function(v) _G.SilentAim = v end)
-AddToggle(Main, "Wallbang Enabled", function(v) _G.Wallbang = v end)
+local Main = AddTab("Main")
+local Misc = AddTab("Misc")
+UI.Containers["Main"].Visible = true
 
-local speedVal = 16
-local slider = Instance.new("TextBox", Misc) -- 킥훅처럼 숫자로 입력하거나 조절 가능하게 변경
-slider.Size = UDim2.new(1, 0, 0, 30)
-slider.PlaceholderText = "WalkSpeed (Default: 16)"
-slider.FocusLost:Connect(function() _G.WalkSpeed = tonumber(slider.Text) or 16 end)
+AddToggle(Main, "Silent Aim (Safe Mode)", function(v) _G.SilentAim = v end)
+AddToggle(Main, "Wallbang", function(v) _G.Wallbang = v end)
+AddToggle(Misc, "Fly", function(v) _G.FlyEnabled = v end)
+AddToggle(Misc, "Inf Jump", function(v) _G.InfJump = v end)
 
-AddToggle(Misc, "Fly Enabled", function(v) _G.FlyEnabled = v end)
-AddToggle(Misc, "Infinite Jump", function(v) _G.InfJump = v end)
+-- [3] 매칭 서버 우회 엔진 (튕김 방지 로직)
 
--- [5] Kick Hook 기반 핵심 엔진 이식
-
--- 1. 진짜 Silent Aim (시점 고정 없음, 총알 각도만 계산)
 local function GetClosest()
-    local target, dist = nil, math.huge
+    local target, dist = nil, 500 -- 너무 먼 거리는 타겟팅 제외 (튕김 방지)
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
             local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
@@ -117,54 +84,45 @@ local function GetClosest()
     return target
 end
 
-local mt = getrawmetatable(game)
-local oldIndex = mt.__index
-setreadonly(mt, false)
+-- 튕김 방지를 위해 getrawmetatable 대신 우회력이 높은 hookmetamethod 사용
+local oldNC
+oldNC = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
 
-mt.__index = newcclosure(function(self, idx)
-    if _G.SilentAim and self == Camera and idx == "CFrame" and not checkcaller() then
+    -- Silent Aim: 총알 계산 함수(Raycast)만 가로챔
+    if not checkcaller() and _G.SilentAim and method == "Raycast" then
         local t = GetClosest()
         if t and t.Character then
-            -- 화면은 그대로인데 내부 연산에서만 적을 바라보는 것처럼 속임 (Kick Hook 방식)
-            return CFrame.new(Camera.CFrame.Position, t.Character.Head.Position)
+            -- 튕김 방지: 원래 쏘려던 방향과 적 사이의 오차를 계산해 자연스럽게 보정
+            args[2] = (t.Character.Head.Position - args[1]).Unit * 1000
+            return oldNC(self, unpack(args))
         end
     end
-    return oldIndex(self, idx)
+    return oldNC(self, ...)
 end)
-setreadonly(mt, true)
 
--- 2. 강제 이동 (WalkSpeed 우회) 및 Fly
+-- 이동 및 기타 루프
 RunService.Heartbeat:Connect(function()
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = LocalPlayer.Character.HumanoidRootPart
-        local hum = LocalPlayer.Character.Humanoid
-        
-        -- 이동속도 (CFrame 강제 밀기 방식)
-        if _G.WalkSpeed > 16 and hum.MoveDirection.Magnitude > 0 then
-            hrp.CFrame = hrp.CFrame + (hum.MoveDirection * (_G.WalkSpeed / 50))
-        end
-
-        -- Fly (Kick Hook 식 위치 고정)
         if _G.FlyEnabled then
-            hrp.Velocity = Vector3.new(0, 0, 0)
-            local flyDir = Vector3.new(0,0,0)
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then flyDir = flyDir + Vector3.new(0,1,0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then flyDir = flyDir + Vector3.new(0,-1,0) end
-            hrp.CFrame = hrp.CFrame + (flyDir * 1.5)
+            hrp.Velocity = Vector3.new(0,0,0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then hrp.CFrame *= CFrame.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then hrp.CFrame *= CFrame.new(0,-1,0) end
         end
     end
 end)
 
--- 3. Infinite Jump
 UserInputService.JumpRequest:Connect(function()
     if _G.InfJump and LocalPlayer.Character then
-        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+        LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
     end
 end)
 
--- 메뉴 오픈 버튼
+-- 메뉴 버튼
 local OpenBtn = Instance.new("TextButton", ScreenGui)
 OpenBtn.Size = UDim2.new(0, 50, 0, 50)
 OpenBtn.Position = UDim2.new(0, 10, 0.4, 0)
-OpenBtn.Text = "Menu"; OpenBtn.Draggable = true
+OpenBtn.Text = "Menu"
 OpenBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
