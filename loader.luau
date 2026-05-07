@@ -5,104 +5,137 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [1] 이전 UI 제거
+-- [1] UI 초기화
 if CoreGui:FindFirstChild("NamelessHub") then CoreGui.NamelessHub:Destroy() end
-
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
 ScreenGui.Name = "NamelessHub"
 
 _G.Config = {
-    SilentAim = true,  -- 기본 활성화
-    Wallbang = true,   -- 벽 뚫기 기본 활성화
-    ESP = true,        -- ESP 기본 활성화
+    SilentAim = false,
+    Wallbang = false,
+    ESP = false,
     WalkSpeed = 16,
-    InfJump = true
+    Emote = false, -- 에모트 온/오프
+    AnimSpeed = 99999
 }
 
--- [2] 핵심: 매직 불렛(Silent Aim) 로직
--- 게임의 총알 생성 방식(Raycast)을 가로채서 적의 헤드로 경로를 바꿉니다.
-local mt = getrawmetatable(game)
-local oldNamecall = mt.__namecall
-setreadonly(mt, false)
+-- 애니메이션 로직 준비
+local animation = Instance.new("Animation")
+animation.AnimationId = "rbxassetid://92281817840531"
 
+local function playCustomAnim(character)
+    if not _G.Config.Emote then return end
+    local Hum = character:FindFirstChildWhichIsA("Humanoid")
+    if Hum then
+        for _, track in next, Hum:GetPlayingAnimationTracks() do track:Stop() end
+        local anim = Hum:LoadAnimation(animation)
+        anim.Priority = Enum.AnimationPriority.Action4
+        anim:Play()
+        anim:AdjustSpeed(_G.Config.AnimSpeed)
+        anim.Stopped:Connect(function() 
+            if _G.Config.Emote then playCustomAnim(character) end 
+        end)
+    end
+end
+
+-- [2] UI 프레임 및 탭
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 400, 0, 300)
+MainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.Draggable = true; MainFrame.Active = true
+
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, 0, 0, 30)
+TabBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Instance.new("UIListLayout", TabBar).FillDirection = Enum.FillDirection.Horizontal
+
+local UI = { Pages = {} }
+
+local function CreateTab(name)
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size = UDim2.new(0, 80, 1, 0); btn.Text = name; btn.BackgroundTransparency = 1
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    local Page = Instance.new("ScrollingFrame", MainFrame)
+    Page.Size = UDim2.new(1, -10, 1, -40); Page.Position = UDim2.new(0, 5, 0, 35)
+    Page.Visible = false; Page.BackgroundTransparency = 1
+    btn.MouseButton1Click:Connect(function()
+        for _, p in pairs(UI.Pages) do p.Visible = false end
+        Page.Visible = true
+    end)
+    UI.Pages[name] = Page
+    return Page
+end
+
+local function CreateToggle(parent, text, var, callback)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(1, 0, 0, 30); btn.Text = text .. ": OFF"
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.MouseButton1Click:Connect(function()
+        _G.Config[var] = not _G.Config[var]
+        btn.Text = text .. ": " .. (_G.Config[var] and "ON" or "OFF")
+        if callback then callback(_G.Config[var]) end
+    end)
+end
+
+-- [3] 기능 배치
+local Main = CreateTab("Main")
+local EmoteTab = CreateTab("Emote")
+local ESPTab = CreateTab("ESP")
+
+CreateToggle(Main, "Silent Aim (Bullet Fix)", "SilentAim")
+CreateToggle(Main, "Wallbang", "Wallbang")
+
+-- 에모트 토글
+CreateToggle(EmoteTab, "Enable Custom Emote", "Emote", function(state)
+    if state and LocalPlayer.Character then
+        playCustomAnim(LocalPlayer.Character)
+    else
+        local Hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if Hum then for _, v in next, Hum:GetPlayingAnimationTracks() do v:Stop() end end
+    end
+end)
+
+CreateToggle(ESPTab, "Box ESP", "ESP")
+
+-- [4] Silent Aim 엔진 (카메라 고정 없음 - 총알만 유도)
+local mt = getrawmetatable(game)
+local old = mt.__namecall
+setreadonly(mt, false)
 mt.__namecall = newcclosure(function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
-
     if _G.Config.SilentAim and method == "Raycast" then
         local target = nil
-        local closest = math.huge
-        
+        local dist = math.huge
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
                 local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
                 if vis or _G.Config.Wallbang then
-                    local mag = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                    if mag < closest then
-                        target = p
-                        closest = mag
-                    end
+                    local m = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                    if m < dist then target = p; dist = m end
                 end
             end
         end
-        
-        -- 총알의 방향을 적의 헤드로 강제 변경
         if target then
             args[2] = (target.Character.Head.Position - args[1]).Unit * 1000
-            return oldNamecall(self, unpack(args))
+            return old(self, unpack(args))
         end
     end
-    return oldNamecall(self, ...)
+    return old(self, unpack(args))
 end)
 setreadonly(mt, true)
 
--- [3] UI 및 기타 편의 기능 (사용자 요청 기능 포함)
-local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 400, 0, 250)
-MainFrame.Position = UDim2.new(0.5, -200, 0.5, -125)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-MainFrame.Draggable = true; MainFrame.Active = true
-
--- 탭/버튼 생성 함수
-local function CreateToggle(text, var, pos)
-    local btn = Instance.new("TextButton", MainFrame)
-    btn.Size = UDim2.new(0, 180, 0, 35)
-    btn.Position = pos
-    btn.Text = text .. ": " .. tostring(_G.Config[var])
-    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.MouseButton1Click:Connect(function()
-        _G.Config[var] = not _G.Config[var]
-        btn.Text = text .. ": " .. tostring(_G.Config[var])
-    end)
-end
-
-CreateToggle("Magic Silent Aim", "SilentAim", UDim2.new(0, 10, 0, 50))
-CreateToggle("Wallbang (All Hit)", "Wallbang", UDim2.new(0, 210, 0, 50))
-CreateToggle("Infinite Jump", "InfJump", UDim2.new(0, 10, 0, 100))
-CreateToggle("Player ESP", "ESP", UDim2.new(0, 210, 0, 100))
-
--- [4] 이동 및 ESP 유지 엔진
+-- ESP 및 이동
 RunService.RenderStepped:Connect(function()
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChild("Humanoid") then
-        char.Humanoid.WalkSpeed = _G.Config.WalkSpeed
-    end
-    
-    -- ESP 유지
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local hl = p.Character:FindFirstChild("Highlight")
-            if _G.Config.ESP then
-                if not hl then Instance.new("Highlight", p.Character).FillColor = Color3.fromRGB(255, 0, 0) end
-            elseif hl then hl:Destroy() end
+    if _G.Config.ESP then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and not p.Character:FindFirstChild("Highlight") then
+                Instance.new("Highlight", p.Character).FillColor = Color3.fromRGB(255, 0, 0)
+            end
         end
     end
 end)
 
--- 무한 점프
-UserInputService.JumpRequest:Connect(function()
-    if _G.Config.InfJump and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-    end
-end)
+UI.Pages["Main"].Visible = true
