@@ -5,23 +5,21 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [1] 중복 실행 방지 및 초기화
+-- [1] 중복 실행 방지
 if CoreGui:FindFirstChild("NamelessHub") then CoreGui.NamelessHub:Destroy() end
 if CoreGui:FindFirstChild("NamelessToggle") then CoreGui.NamelessToggle:Destroy() end
 
 local UI = { Tabs = {}, Containers = {}, CurrentTab = nil, IsOpen = true }
-_G.FlyEnabled = false
-_G.Noclip = false
 
--- [2] 메인 UI 생성
+-- [2] 메인 UI 프레임 (아까 잘 뜨던 그 구조)
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "NamelessHub"
 ScreenGui.Parent = CoreGui
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 480, 0, 380)
-MainFrame.Position = UDim2.new(0.5, -240, 0.5, -190)
+MainFrame.Size = UDim2.new(0, 480, 0, 360)
+MainFrame.Position = UDim2.new(0.5, -240, 0.5, -180)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 MainFrame.BorderSizePixel = 1
 MainFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
@@ -29,7 +27,7 @@ MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 
--- [3] 모바일 전용 메뉴 버튼 (Menu 버튼이 안 뜨면 안 되니까!)
+-- [3] 메뉴 열기/닫기 버튼 (모바일 필수)
 local ToggleGui = Instance.new("ScreenGui")
 ToggleGui.Name = "NamelessToggle"
 ToggleGui.Parent = CoreGui
@@ -38,8 +36,10 @@ local OpenBtn = Instance.new("TextButton")
 OpenBtn.Size = UDim2.new(0, 50, 0, 50)
 OpenBtn.Position = UDim2.new(0, 10, 0.4, 0)
 OpenBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+OpenBtn.BorderSizePixel = 1
+OpenBtn.BorderColor3 = Color3.fromRGB(0, 170, 255)
 OpenBtn.Text = "Menu"
-OpenBtn.TextColor3 = Color3.fromRGB(0, 170, 255)
+OpenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 OpenBtn.Draggable = true
 OpenBtn.Parent = ToggleGui
 
@@ -48,7 +48,7 @@ OpenBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = UI.IsOpen
 end)
 
--- [4] 상단바 및 탭 바
+-- [4] 탭 시스템 설정
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 30)
 Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
@@ -64,19 +64,18 @@ TabBar.Position = UDim2.new(0, 0, 0, 30)
 TabBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 TabBar.Parent = MainFrame
 
-local TabList = Instance.new("UIListLayout")
-TabList.FillDirection = Enum.FillDirection.Horizontal
-TabList.SortOrder = Enum.SortOrder.LayoutOrder
-TabList.Parent = TabBar
+local TabListLayout = Instance.new("UIListLayout")
+TabListLayout.FillDirection = Enum.FillDirection.Horizontal
+TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TabListLayout.Parent = TabBar
 
--- [5] 탭/기능 추가 함수
 local function AddTab(name)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 68, 1, 0)
     btn.BackgroundTransparency = 1
     btn.Text = name:lower()
-    btn.TextColor3 = Color3.fromRGB(150, 150, 150)
     btn.Font = Enum.Font.Code
+    btn.TextColor3 = Color3.fromRGB(150, 150, 150)
     btn.Parent = TabBar
 
     local Container = Instance.new("ScrollingFrame")
@@ -106,9 +105,12 @@ end
 
 local function AddToggle(parent, text, callback)
     local Frame = Instance.new("TextButton")
-    Frame.Size = UDim2.new(1, 0, 0, 30)
+    Frame.Size = UDim2.new(1, 0, 0, 35)
     Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    Frame.BorderSizePixel = 1
+    Frame.BorderColor3 = Color3.fromRGB(45, 45, 45)
     Frame.Text = ""
+    Frame.AutoButtonColor = false
     Frame.Parent = parent
 
     local Label = Instance.new("TextLabel")
@@ -135,32 +137,57 @@ local function AddToggle(parent, text, callback)
     end)
 end
 
--- [6] 기능 배치
+-- [5] 메뉴 구성 (요청하신 탭들)
 local Main = AddTab("Main")
+local World = AddTab("World")
+local ESP = AddTab("ESP")
+local Visuals = AddTab("Visuals")
+local Character = AddTab("Character")
 local Misc = AddTab("Misc")
-AddTab("World"); AddTab("ESP"); AddTab("Visuals"); AddTab("Character"); AddTab("Settings")
+local Settings = AddTab("Settings")
 
-AddToggle(Main, "Aimbot Enabled", function(v) _G.Aimbot = v end)
-AddToggle(Main, "Silent Aim Enabled", function(v) _G.SilentAim = v end)
-
+-- Misc 탭에 이동 기능 배치
 AddToggle(Misc, "Fly (비행)", function(v) _G.FlyEnabled = v end)
 AddToggle(Misc, "Noclip (벽 통과)", function(v) _G.Noclip = v end)
 AddToggle(Misc, "Infinite Jump", function(v) _G.InfJump = v end)
 
--- [7] 루프 엔진 (Noclip, Fly, Jump)
+-- [6] 핵심 기능 엔진 (Fly, Noclip, InfJump)
+local Speed = 50
 RunService.Stepped:Connect(function()
-    if _G.Noclip and LocalPlayer.Character then
-        for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = false end
+    if not LocalPlayer.Character then return end
+    
+    -- Noclip 로직
+    if _G.Noclip then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+    
+    -- Fly 로직
+    if _G.FlyEnabled then
+        local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            local moveDir = Vector3.new(0,0,0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Camera.CFrame.RightVector end
+            root.Velocity = moveDir * Speed
+            root.Anchored = false -- 비행 중엔 물리 적용
         end
     end
 end)
 
 UserInputService.JumpRequest:Connect(function()
     if _G.InfJump and LocalPlayer.Character then
-        local h = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then 
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            -- 이단 점프 로직 보정
+            local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if root then root.Velocity = Vector3.new(root.Velocity.X, 50, root.Velocity.Z) end
+        end
     end
 end)
 
-print("Nameless Hub Loaded!")
+print("Nameless Hub v1 정식 가동!")
