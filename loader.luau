@@ -1,135 +1,119 @@
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
+-- [1] 초기화 및 클론 참조 (Solix 로직 적용)
+local function cloneref(o) return o end
+local CoreGui = cloneref(game:GetService("CoreGui"))
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local RunService = cloneref(game:GetService("RunService"))
+local Players = cloneref(game:GetService("Players"))
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [1] 중복 실행 방지
+-- 중복 제거
 if CoreGui:FindFirstChild("NamelessHub") then CoreGui.NamelessHub:Destroy() end
-if CoreGui:FindFirstChild("NamelessToggle") then CoreGui.NamelessToggle:Destroy() end
 
-local ScreenGui = Instance.new("ScreenGui", CoreGui)
-ScreenGui.Name = "NamelessHub"
-
--- 전역 설정
+-- [2] 설정값 (전역)
 _G.Config = {
     SilentAim = false,
     Wallbang = false,
-    ESP = false,
-    InfJump = false,
     Fly = false,
     WalkSpeed = 16,
-    AllSkins = false
+    Emote = false,
+    ESP = false,
+    AllSkins = false,
+    AnimSpeed = 99999
 }
 
--- [2] UI 디자인 (사진 속 Nameless v1 스타일 재현)
+-- [3] UI 생성 (사진 속 Nameless v1 스타일)
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+ScreenGui.Name = "NamelessHub"
+
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 500, 0, 380)
-MainFrame.Position = UDim2.new(0.5, -250, 0.5, -190)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.Size = UDim2.new(0, 500, 0, 400)
+MainFrame.Position = UDim2.new(0.5, -250, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 MainFrame.BorderColor3 = Color3.fromRGB(0, 170, 255)
 MainFrame.Draggable = true; MainFrame.Active = true
 
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Size = UDim2.new(1, 0, 0, 35)
-Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-Title.Text = "  Nameless hub | v1"
+Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Title.Text = "  Nameless hub | Rivals Edition"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Font = Enum.Font.Code; Title.TextXAlignment = Enum.TextXAlignment.Left
 
 local TabBar = Instance.new("Frame", MainFrame)
 TabBar.Size = UDim2.new(1, 0, 0, 30)
 TabBar.Position = UDim2.new(0, 0, 0, 35)
-TabBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+TabBar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 Instance.new("UIListLayout", TabBar).FillDirection = Enum.FillDirection.Horizontal
 
-local UI = { Tabs = {}, Pages = {} }
+local UI = { Pages = {} }
 
 local function CreateTab(name)
     local btn = Instance.new("TextButton", TabBar)
-    btn.Size = UDim2.new(0, 80, 1, 0); btn.BackgroundTransparency = 1
-    btn.Text = name:lower(); btn.Font = Enum.Font.Code; btn.TextColor3 = Color3.fromRGB(150, 150, 150)
+    btn.Size = UDim2.new(0, 100, 1, 0); btn.BackgroundTransparency = 1
+    btn.Text = name:upper(); btn.Font = Enum.Font.Code; btn.TextColor3 = Color3.fromRGB(150, 150, 150)
     
     local Page = Instance.new("ScrollingFrame", MainFrame)
     Page.Size = UDim2.new(1, -10, 1, -80); Page.Position = UDim2.new(0, 5, 0, 75)
-    Page.BackgroundTransparency = 1; Page.Visible = false; Page.ScrollBarThickness = 2
+    Page.BackgroundTransparency = 1; Page.Visible = false; Page.ScrollBarThickness = 0
     Instance.new("UIListLayout", Page).Padding = UDim.new(0, 5)
 
     btn.MouseButton1Click:Connect(function()
         for _, p in pairs(UI.Pages) do p.Visible = false end
-        for _, t in pairs(UI.Tabs) do t.TextColor3 = Color3.fromRGB(150, 150, 150) end
-        Page.Visible = true; btn.TextColor3 = Color3.fromRGB(0, 170, 255)
+        Page.Visible = true
     end)
-    UI.Tabs[name] = btn; UI.Pages[name] = Page
+    UI.Pages[name] = Page
     return Page
 end
 
 local function CreateToggle(parent, text, var)
-    local f = Instance.new("TextButton", parent)
-    f.Size = UDim2.new(1, -10, 0, 30); f.BackgroundColor3 = Color3.fromRGB(25, 25, 25); f.Text = ""
-    local l = Instance.new("TextLabel", f)
-    l.Size = UDim2.new(1, -40, 1, 0); l.Position = UDim2.new(0, 10, 0, 0); l.Text = text; l.TextColor3 = Color3.fromRGB(200, 200, 200); l.Font = Enum.Font.Code; l.TextXAlignment = Enum.TextXAlignment.Left; l.BackgroundTransparency = 1
-    local b = Instance.new("Frame", f); b.Size = UDim2.new(0, 16, 0, 16); b.Position = UDim2.new(1, -26, 0.5, -8); b.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    f.MouseButton1Click:Connect(function()
+    local b = Instance.new("TextButton", parent)
+    b.Size = UDim2.new(1, 0, 0, 35); b.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    b.Text = text .. ": OFF"; b.TextColor3 = Color3.fromRGB(200, 200, 200); b.Font = Enum.Font.Code
+    b.MouseButton1Click:Connect(function()
         _G.Config[var] = not _G.Config[var]
-        b.BackgroundColor3 = _G.Config[var] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(40, 40, 40)
+        b.Text = text .. ": " .. (_G.Config[var] and "ON" or "OFF")
+        b.TextColor3 = _G.Config[var] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(200, 200, 200)
     end)
 end
 
-local function CreateSlider(parent, text, min, max, var)
-    local f = Instance.new("Frame", parent); f.Size = UDim2.new(1, -10, 0, 40); f.BackgroundTransparency = 1
-    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.Text = text .. ": " .. min; l.TextColor3 = Color3.fromRGB(200, 200, 200); l.Font = Enum.Font.Code; l.BackgroundTransparency = 1
-    local b = Instance.new("TextButton", f); b.Size = UDim2.new(0.9, 0, 0, 4); b.Position = UDim2.new(0.05, 0, 0.7, 0); b.BackgroundColor3 = Color3.fromRGB(40, 40, 40); b.Text = ""
-    local fill = Instance.new("Frame", b); fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 255); fill.BorderSizePixel = 0
-    b.MouseButton1Down:Connect(function()
-        local m; m = RunService.RenderStepped:Connect(function()
-            local p = math.clamp((UserInputService:GetMouseLocation().X - b.AbsolutePosition.X) / b.AbsoluteSize.X, 0, 1)
-            fill.Size = UDim2.new(p, 0, 1, 0); local val = math.floor(min + (max - min) * p)
-            l.Text = text .. ": " .. val; _G.Config[var] = val
-            if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then m:Disconnect() end
-        end)
-    end)
-end
+-- [4] 탭 구성
+local MainTab = CreateTab("Main")
+local RageTab = CreateTab("Rage")
+local VisualTab = CreateTab("Visuals")
+local MiscTab = CreateTab("Misc")
 
--- [3] 탭 기능 구성
-local Main = CreateTab("Main")
-local Rage = CreateTab("Rage")
-local ESPTab = CreateTab("ESP")
-local Misc = CreateTab("Misc")
-
--- Main: 전투
-CreateToggle(Main, "Silent Aim", "SilentAim")
-CreateToggle(Main, "Wallbang", "Wallbang")
+-- Main: 전투 기능
+CreateToggle(MainTab, "Silent Aim", "SilentAim")
+CreateToggle(MainTab, "Wallbang", "Wallbang")
 
 -- Rage: 강력한 이동
-CreateToggle(Rage, "Fly Enabled", "Fly")
-CreateToggle(Rage, "Noclip", "Noclip")
-CreateSlider(Rage, "WalkSpeed", 16, 500, "WalkSpeed")
+CreateToggle(RageTab, "Fly Mode", "Fly")
+CreateToggle(RageTab, "Infinite Jump", "InfJump")
 
--- ESP: 시각
-CreateToggle(ESPTab, "Box ESP", "ESP")
+-- Visuals: 시각 기능
+CreateToggle(VisualTab, "Box ESP", "ESP")
 
--- Misc: 편의
-CreateToggle(Misc, "Infinite Jump", "InfJump")
-CreateToggle(Misc, "All Skins Unlock", "AllSkins")
+-- Misc: 기타 기능
+CreateToggle(MiscTab, "Custom Emote", "Emote")
+CreateToggle(MiscTab, "Skin Changer", "AllSkins")
 
--- [4] 핵심 엔진 로직 (사일런트 에임 & 이동)
-local function GetClosest()
+-- [5] 핵심 엔진 로직 (Solix + Silent Aim 통합)
+local function GetTarget()
     local t, d = nil, math.huge
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
             local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
             if vis or _G.Config.Wallbang then
-                local mag = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                if mag < d then t = p; d = mag end
+                local m = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                if m < d then t = p; d = m end
             end
         end
     end
     return t
 end
 
--- Silent Aim (매직 불렛 방식)
+-- Silent Aim: Raycast 변조
 local mt = getrawmetatable(game)
 local old = mt.__namecall
 setreadonly(mt, false)
@@ -137,7 +121,7 @@ mt.__namecall = newcclosure(function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     if _G.Config.SilentAim and method == "Raycast" and not checkcaller() then
-        local target = GetClosest()
+        local target = GetTarget()
         if target then
             args[2] = (target.Character.Head.Position - args[1]).Unit * 1000
             return old(self, unpack(args))
@@ -147,18 +131,32 @@ mt.__namecall = newcclosure(function(self, ...)
 end)
 setreadonly(mt, true)
 
--- 루프 엔진 (Speed, Jump, ESP)
-RunService.Stepped:Connect(function()
+-- 애니메이션 설정
+local anim = Instance.new("Animation")
+anim.AnimationId = "rbxassetid://92281817840531"
+
+-- 루프 엔진 (ESP, Fly, Emote)
+RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        if _G.Config.WalkSpeed > 16 and char.Humanoid.MoveDirection.Magnitude > 0 then
-            char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 100))
+    if char then
+        -- Fly & Move
+        if _G.Config.Fly and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.Velocity = Vector3.new(0, 1, 0) -- 공중 부양
         end
-        if _G.Config.Fly then char.HumanoidRootPart.Velocity = Vector3.new(0, 2, 0) end
-        if _G.Config.Noclip then
-            for _, v in pairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
+        
+        -- Emote 로직
+        if _G.Config.Emote then
+            local hum = char:FindFirstChild("Humanoid")
+            if hum and not hum:FindFirstChild("EmotePlaying") then
+                local tag = Instance.new("BoolValue", hum); tag.Name = "EmotePlaying"
+                local track = hum:LoadAnimation(anim)
+                track.Priority = Enum.AnimationPriority.Action4
+                track:Play(); track:AdjustSpeed(_G.Config.AnimSpeed)
+                track.Stopped:Connect(function() tag:Destroy() end)
+            end
         end
     end
+
     -- ESP
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
@@ -177,10 +175,5 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- [5] 메뉴 버튼
-local ToggleBtn = Instance.new("ScreenGui", CoreGui)
-local Btn = Instance.new("TextButton", ToggleBtn)
-Btn.Size = UDim2.new(0, 60, 0, 30); Btn.Position = UDim2.new(0, 10, 0.4, 0); Btn.Text = "MENU"
-Btn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
-
 UI.Pages["Main"].Visible = true
+
