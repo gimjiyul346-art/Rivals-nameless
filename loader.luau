@@ -1,4 +1,4 @@
--- [[ Nameless hub | v1 - Team Check & Shift Toggle Fix ]] --
+-- [[ Nameless hub | v1 - Slider Restored & 1P Aimbot Fix ]] --
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -17,7 +17,6 @@ ScreenGui.Name = "NamelessHub"
 _G.Config = {
     Aimbot = false,
     AutoShoot = false,
-    TeamCheck = true, -- 팀 체크 기능 기본 활성화
     ESP = false,
     Noclip = false,
     Fly = false,
@@ -66,6 +65,7 @@ local function CreateToggle(parent, text, var)
     end)
 end
 
+-- [예전에 잘 됐던 슬라이더 방식 복구]
 local function CreateSlider(parent, text, min, max, var)
     local f = Instance.new("Frame", parent); f.Size = UDim2.new(1, -10, 0, 40); f.BackgroundTransparency = 1
     local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.Text = text .. ": " .. _G.Config[var]; l.TextColor3 = Color3.fromRGB(200, 200, 200); l.Font = Enum.Font.Code; l.BackgroundTransparency = 1; l.TextXAlignment = Enum.TextXAlignment.Left
@@ -84,27 +84,22 @@ end
 
 -- 탭 구성
 local Combat = CreateTab("Combat"); local Rage = CreateTab("Rage"); local Visuals = CreateTab("Visuals")
-CreateToggle(Combat, "Aimbot (1P Lock)", "Aimbot")
-CreateToggle(Combat, "Team Check", "TeamCheck")
+CreateToggle(Combat, "Aimbot (1st Person Lock)", "Aimbot")
 CreateToggle(Combat, "Auto Shoot", "AutoShoot")
 CreateToggle(Rage, "Noclip", "Noclip")
 CreateToggle(Rage, "Fly", "Fly")
 CreateSlider(Rage, "WalkSpeed", 16, 500, "WalkSpeed")
-CreateToggle(Visuals, "ESP (Highlight)", "ESP")
+CreateToggle(Visuals, "Box ESP", "ESP")
 
--- [[ 핵심 엔진: 팀 체크 포함 ]] --
+-- [[ 핵심 엔진 (1인칭 완벽 대응) ]] --
 local function GetClosest()
     local t, d = nil, math.huge
-    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     for _, p in pairs(Players:GetPlayers()) do
-        -- 팀 체크 및 생존 여부 확인
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") then
-            if p.Character.Humanoid.Health > 0 and (not _G.Config.TeamCheck or p.Team ~= LocalPlayer.Team) then
-                local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
-                if vis then
-                    local m = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                    if m < d then t = p; d = m end
-                end
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
+            if vis then
+                local m = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                if m < d then t = p; d = m end
             end
         end
     end
@@ -115,17 +110,23 @@ RunService.RenderStepped:Connect(function()
     if _G.Config.Aimbot then
         local target = GetClosest()
         if target and target.Character:FindFirstChild("Head") then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+            local headPos = target.Character.Head.Position
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, headPos)
+            
             if _G.Config.AutoShoot then
-                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-                task.wait()
-                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+                if onScreen then
+                    VirtualInputManager:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, true, game, 1)
+                    task.wait()
+                    VirtualInputManager:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, false, game, 1)
+                end
             end
         end
     end
 
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("Humanoid") then
+        -- 속도 적용 로직 강화
         if _G.Config.WalkSpeed > 16 and char.Humanoid.MoveDirection.Magnitude > 0 then
             char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 280))
         end
@@ -136,41 +137,28 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [[ 고성능 Highlight ESP ]] --
+-- ESP 엔진
 RunService.RenderStepped:Connect(function()
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local hl = p.Character:FindFirstChild("NamelessESP")
-            if _G.Config.ESP then
-                if not hl then
-                    hl = Instance.new("Highlight")
-                    hl.Name = "NamelessESP"
-                    hl.Parent = p.Character
-                    hl.FillColor = Color3.fromRGB(0, 170, 255)
-                    hl.OutlineColor = Color3.new(1, 1, 1)
+    if _G.Config.ESP then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local esp = p.Character:FindFirstChild("NamelessESP")
+                if not esp then
+                    esp = Instance.new("BoxHandleAdornment", p.Character)
+                    esp.Name = "NamelessESP"; esp.Adornee = p.Character.HumanoidRootPart
+                    esp.AlwaysOnTop = true; esp.ZIndex = 10; esp.Transparency = 0.5; esp.Color3 = Color3.fromRGB(0, 170, 255)
                 end
-                -- 팀에 따라 색상 변경 (선택사항)
-                hl.FillColor = (p.Team == LocalPlayer.Team) and Color3.new(0, 1, 0) or Color3.new(1, 0, 0)
-                hl.Enabled = true
-            else
-                if hl then hl.Enabled = false end
+                esp.Size = p.Character:GetExtentsSize()
             end
         end
     end
 end)
 
--- [[ Shift 키 토글 ]] --
-UserInputService.InputBegan:Connect(function(input, chat)
-    if not chat and input.KeyCode == Enum.KeyCode.LeftShift then
-        MainFrame.Visible = not MainFrame.Visible
-    end
-end)
-
--- 메뉴 버튼 (모바일 겸용)
+-- 메뉴 버튼
 local ToggleBtn = Instance.new("ScreenGui", CoreGui)
 local Btn = Instance.new("TextButton", ToggleBtn)
 Btn.Size = UDim2.new(0, 50, 0, 50); Btn.Position = UDim2.new(0, 10, 0.4, 0)
-Btn.Text = "N"; Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Btn.TextColor3 = Color3.new(1,1,1); Btn.Draggable = false
+Btn.Text = "N"; Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Btn.TextColor3 = Color3.new(1,1,1); Btn.Draggable = true
 Instance.new("UICorner", Btn).CornerRadius = UDim.new(1, 0)
 Btn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
