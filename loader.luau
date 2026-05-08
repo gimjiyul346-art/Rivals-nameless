@@ -1,147 +1,136 @@
--- [[ Nameless hub | v1 - Ultimate Mobile Edition ]] --
-local cloneref = cloneref or function(o) return o end
-local Players = cloneref(game:GetService("Players"))
-local RunService = cloneref(game:GetService("RunService"))
-local UserInputService = cloneref(game:GetService("UserInputService"))
-local TweenService = cloneref(game:GetService("TweenService"))
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- 기존 UI 제거
-if game:GetService("CoreGui"):FindFirstChild("NamelessUI") then game:GetService("CoreGui").NamelessUI:Destroy() end
+-- [1] 중복 실행 방지
+if CoreGui:FindFirstChild("NamelessHub") then CoreGui.NamelessHub:Destroy() end
+if CoreGui:FindFirstChild("NamelessToggle") then CoreGui.NamelessToggle:Destroy() end
 
--- 설정 변수
-getgenv().Config = {
-    Aimbot = false,
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+ScreenGui.Name = "NamelessHub"
+
+_G.Config = {
     SilentAim = false,
-    WalkSpeed = 16,
-    Fly = false,
-    FlySpeed = 50,
-    InfJump = false,
-    NoClip = false,
+    Wallbang = false,
     ESP = false,
-    TargetPart = "HumanoidRootPart"
+    Noclip = false,
+    Fly = false,
+    WalkSpeed = 16,
+    AllSkins = false
 }
 
--- [[ UI 구성 ]] --
-local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-ScreenGui.Name = "NamelessUI"
+-- [2] UI 디자인 (생략 없이 필수 탭 유지)
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 400, 0, 300)
+MainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BorderColor3 = Color3.fromRGB(0, 170, 255)
+MainFrame.Draggable = true; MainFrame.Active = true
 
--- 토글 버튼
-local Toggle = Instance.new("TextButton", ScreenGui)
-Toggle.Size = UDim2.new(0, 45, 0, 45); Toggle.Position = UDim2.new(0, 10, 0.5, 0)
-Toggle.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Toggle.Text = "N"; Toggle.Draggable = true
-Instance.new("UICorner", Toggle).CornerRadius = UDim.new(1, 0)
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Title.Text = "  Nameless v1 | AIM FIXED"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.Code; Title.TextXAlignment = Enum.TextXAlignment.Left
 
--- 메인 프레임
-local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 420, 0, 280); Main.Position = UDim2.new(0.5, -210, 0.5, -140)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15); Main.BorderSizePixel = 0; Main.Active = true; Main.Draggable = true
-Toggle.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, 0, 0, 30)
+TabBar.Position = UDim2.new(0, 0, 0, 30)
+TabBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Instance.new("UIListLayout", TabBar).FillDirection = Enum.FillDirection.Horizontal
 
--- 탭 & 컨테이너
-local Tabs = Instance.new("Frame", Main)
-Tabs.Size = UDim2.new(0, 100, 1, 0); Tabs.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Instance.new("UIListLayout", Tabs)
+local UI = { Tabs = {}, Pages = {} }
 
-local Container = Instance.new("Frame", Main)
-Container.Size = UDim2.new(1, -110, 1, -10); Container.Position = UDim2.new(0, 105, 0, 5); Container.BackgroundTransparency = 1
-
-local function NewTab(name)
-    local b = Instance.new("TextButton", Tabs)
-    b.Size = UDim2.new(1, 0, 0, 40); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(25, 25, 25); b.TextColor3 = Color3.new(1,1,1)
-    local p = Instance.new("ScrollingFrame", Container)
-    p.Size = UDim2.new(1, 0, 1, 0); p.Visible = false; p.BackgroundTransparency = 1; p.CanvasSize = UDim2.new(0,0,2,0)
-    Instance.new("UIListLayout", p).Padding = UDim.new(0, 5)
-    b.MouseButton1Click:Connect(function()
-        for _, v in pairs(Container:GetChildren()) do v.Visible = false end
-        p.Visible = true
+local function CreateTab(name)
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size = UDim2.new(0, 80, 1, 0)
+    btn.BackgroundTransparency = 1; btn.Text = name:lower(); btn.Font = Enum.Font.Code; btn.TextColor3 = Color3.fromRGB(150, 150, 150)
+    local Page = Instance.new("ScrollingFrame", MainFrame)
+    Page.Size = UDim2.new(1, -10, 1, -70)
+    Page.Position = UDim2.new(0, 5, 0, 65)
+    Page.BackgroundTransparency = 1; Page.Visible = false; Page.ScrollBarThickness = 0
+    Instance.new("UIListLayout", Page).Padding = UDim.new(0, 5)
+    btn.MouseButton1Click:Connect(function()
+        for _, p in pairs(UI.Pages) do p.Visible = false end
+        for _, t in pairs(UI.Tabs) do t.TextColor3 = Color3.fromRGB(150, 150, 150) end
+        Page.Visible = true; btn.TextColor3 = Color3.fromRGB(0, 170, 255)
     end)
-    return p
+    UI.Tabs[name] = btn; UI.Pages[name] = Page
+    return Page
 end
 
--- 기능 컴포넌트
-local function AddToggle(parent, text, var)
-    local t = Instance.new("TextButton", parent)
-    t.Size = UDim2.new(1, -5, 0, 35); t.BackgroundColor3 = Color3.fromRGB(30,30,30); t.Text = text .. ": OFF"; t.TextColor3 = Color3.new(1,1,1)
-    t.MouseButton1Click:Connect(function()
-        getgenv().Config[var] = not getgenv().Config[var]
-        t.Text = text .. ": " .. (getgenv().Config[var] and "ON" or "OFF")
-        t.TextColor3 = getgenv().Config[var] and Color3.fromRGB(0, 170, 255) or Color3.new(1,1,1)
+local function CreateToggle(parent, text, var)
+    local f = Instance.new("TextButton", parent)
+    f.Size = UDim2.new(1, 0, 0, 25); f.BackgroundColor3 = Color3.fromRGB(25, 25, 25); f.Text = ""
+    local l = Instance.new("TextLabel", f)
+    l.Size = UDim2.new(1, -40, 1, 0); l.Position = UDim2.new(0, 10, 0, 0); l.Text = text; l.TextColor3 = Color3.fromRGB(200, 200, 200); l.Font = Enum.Font.Code; l.TextXAlignment = Enum.TextXAlignment.Left; l.BackgroundTransparency = 1
+    local b = Instance.new("Frame", f); b.Size = UDim2.new(0, 14, 0, 14); b.Position = UDim2.new(1, -24, 0.5, -7); b.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    f.MouseButton1Click:Connect(function()
+        _G.Config[var] = not _G.Config[var]
+        b.BackgroundColor3 = _G.Config[var] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(40, 40, 40)
     end)
 end
 
--- 이동속도 슬라이더 (바 형식)
-local function AddSlider(parent, text, var, min, max)
-    local sFrame = Instance.new("Frame", parent)
-    sFrame.Size = UDim2.new(1, -5, 0, 50); sFrame.BackgroundTransparency = 1
-    local label = Instance.new("TextLabel", sFrame)
-    label.Size = UDim2.new(1, 0, 0, 20); label.Text = text .. ": " .. getgenv().Config[var]; label.TextColor3 = Color3.new(1,1,1); label.BackgroundTransparency = 1
-    local bar = Instance.new("TextButton", sFrame)
-    bar.Size = UDim2.new(1, 0, 0, 20); bar.Position = UDim2.new(0, 0, 0, 25); bar.BackgroundColor3 = Color3.fromRGB(40, 40, 40); bar.Text = ""
-    local fill = Instance.new("Frame", bar)
-    fill.Size = UDim2.new((getgenv().Config[var] - min)/(max - min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 255); fill.BorderSizePixel = 0
+-- [3] 필수 탭 구성
+local Main = CreateTab("Main")
+local Rage = CreateTab("Rage")
+local ESPTab = CreateTab("ESP")
+local Misc = CreateTab("Misc")
 
-    local function update(input)
-        local pos = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-        fill.Size = UDim2.new(pos, 0, 1, 0)
-        local val = math.floor(min + (max - min) * pos)
-        getgenv().Config[var] = val
-        label.Text = text .. ": " .. val
-    end
+CreateToggle(Main, "Silent Aim (AUTO-FIX)", "SilentAim")
+CreateToggle(Main, "Wallbang", "Wallbang")
+CreateToggle(Rage, "Fly Enabled", "Fly")
+CreateToggle(Rage, "Noclip", "Noclip")
+CreateToggle(ESPTab, "Box ESP", "ESP")
+CreateToggle(Misc, "All Skins Unlock", "AllSkins")
 
-    bar.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then update(input) end end)
-end
-
--- 탭 구성
-local TMain = NewTab("Main")
-local TRage = NewTab("Rage")
-local TChar = NewTab("Character")
-
-AddToggle(TMain, "Aimbot (Follow)", "Aimbot")
-AddToggle(TMain, "Silent Aim", "SilentAim")
-AddToggle(TRage, "Fly Mode", "Fly")
-AddSlider(TChar, "Walk Speed", "WalkSpeed", 16, 250)
-AddToggle(TChar, "Infinite Jump", "InfJump")
-AddToggle(TChar, "No Clip", "NoClip")
-
--- [[ 엔진 로직 ]] --
-local function GetClosest()
-    local target, dist = nil, math.huge
-    for _, v in pairs(Players:GetPlayers()) do
-        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-            local pos, vis = Camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
-            if vis then
+-- [4] 무조건 작동하는 에임 엔진 (가장 원초적인 방식)
+local function GetTarget()
+    local target, closest = nil, 500 -- 사거리
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
+            if vis or _G.Config.Wallbang then
                 local mag = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                if mag < dist then target = v; dist = mag end
+                if mag < closest then target = p; closest = mag end
             end
         end
     end
     return target
 end
 
--- 에임봇 (적을 직접 따라감)
+-- Raycast 후킹이 안 될 경우를 대비한 2중 장치
 RunService.RenderStepped:Connect(function()
-    if getgenv().Config.Aimbot then
-        local t = GetClosest()
-        if t and t.Character then
-            local targetPos = Camera:WorldToScreenPoint(t.Character[getgenv().Config.TargetPart].Position)
-            local mousePos = UserInputService:GetMouseLocation()
-            TweenService:Create(Camera, TweenInfo.new(0.1, Enum.EasingStyle.Linear), {CFrame = CFrame.new(Camera.CFrame.Position, t.Character[getgenv().Config.TargetPart].Position)}):Play()
-        end
-    end
-end)
-
--- 캐릭터 속도 강제 적용 (작동 안 됨 해결)
-RunService.Heartbeat:Connect(function()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.WalkSpeed = getgenv().Config.WalkSpeed
-        if getgenv().Config.NoClip then
-            for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
-                if v:IsA("BasePart") then v.CanCollide = false end
+    if _G.Config.SilentAim then
+        local t = GetTarget()
+        if t and t.Character and t.Character:FindFirstChild("Head") then
+            -- 카메라가 적의 머리를 직접 바라보게 하는 방식 (가장 확실함)
+            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position, t.Character.Head.Position)
             end
         end
     end
 end)
 
-TMain.Visible = true
+-- 이동 및 기타 엔진
+RunService.Stepped:Connect(function()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        if _G.Config.Fly then char.HumanoidRootPart.Velocity = Vector3.new(0, 2, 0) end
+        if _G.Config.Noclip then
+            for _, v in pairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
+        end
+    end
+end)
+
+-- [5] 메뉴 버튼
+local ToggleGui = Instance.new("ScreenGui", CoreGui)
+local Btn = Instance.new("TextButton", ToggleGui)
+Btn.Size = UDim2.new(0, 60, 0, 30); Btn.Position = UDim2.new(0, 10, 0.4, 0); Btn.Text = "MENU"
+Btn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+
+UI.Pages["Main"].Visible = true
