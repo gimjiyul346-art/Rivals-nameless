@@ -1,4 +1,4 @@
--- [[ Nameless hub | v1 - Slider Restored & 1P Aimbot Fix ]] --
+-- [[ Nameless hub | v1 - PC Shift Toggle & Mobile Fix ]] --
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -65,7 +65,6 @@ local function CreateToggle(parent, text, var)
     end)
 end
 
--- [예전에 잘 됐던 슬라이더 방식 복구]
 local function CreateSlider(parent, text, min, max, var)
     local f = Instance.new("Frame", parent); f.Size = UDim2.new(1, -10, 0, 40); f.BackgroundTransparency = 1
     local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.Text = text .. ": " .. _G.Config[var]; l.TextColor3 = Color3.fromRGB(200, 200, 200); l.Font = Enum.Font.Code; l.BackgroundTransparency = 1; l.TextXAlignment = Enum.TextXAlignment.Left
@@ -84,21 +83,22 @@ end
 
 -- 탭 구성
 local Combat = CreateTab("Combat"); local Rage = CreateTab("Rage"); local Visuals = CreateTab("Visuals")
-CreateToggle(Combat, "Aimbot (1st Person Lock)", "Aimbot")
+CreateToggle(Combat, "Aimbot (1P Lock)", "Aimbot")
 CreateToggle(Combat, "Auto Shoot", "AutoShoot")
 CreateToggle(Rage, "Noclip", "Noclip")
 CreateToggle(Rage, "Fly", "Fly")
 CreateSlider(Rage, "WalkSpeed", 16, 500, "WalkSpeed")
 CreateToggle(Visuals, "Box ESP", "ESP")
 
--- [[ 핵심 엔진 (1인칭 완벽 대응) ]] --
+-- [[ 엔진 로직 ]] --
 local function GetClosest()
     local t, d = nil, math.huge
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
             local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
             if vis then
-                local m = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                local m = (Vector2.new(pos.X, pos.Y) - screenCenter).Magnitude
                 if m < d then t = p; d = m end
             end
         end
@@ -110,11 +110,9 @@ RunService.RenderStepped:Connect(function()
     if _G.Config.Aimbot then
         local target = GetClosest()
         if target and target.Character:FindFirstChild("Head") then
-            local headPos = target.Character.Head.Position
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, headPos)
-            
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
             if _G.Config.AutoShoot then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+                local screenPos, onScreen = Camera:WorldToViewportPoint(target.Character.Head.Position)
                 if onScreen then
                     VirtualInputManager:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, true, game, 1)
                     task.wait()
@@ -126,9 +124,8 @@ RunService.RenderStepped:Connect(function()
 
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("Humanoid") then
-        -- 속도 적용 로직 강화
         if _G.Config.WalkSpeed > 16 and char.Humanoid.MoveDirection.Magnitude > 0 then
-            char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 280))
+            char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 300))
         end
         if _G.Config.Fly then char.HumanoidRootPart.Velocity = Vector3.new(0, 2, 0) end
         if _G.Config.Noclip then
@@ -137,28 +134,18 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ESP 엔진
-RunService.RenderStepped:Connect(function()
-    if _G.Config.ESP then
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                local esp = p.Character:FindFirstChild("NamelessESP")
-                if not esp then
-                    esp = Instance.new("BoxHandleAdornment", p.Character)
-                    esp.Name = "NamelessESP"; esp.Adornee = p.Character.HumanoidRootPart
-                    esp.AlwaysOnTop = true; esp.ZIndex = 10; esp.Transparency = 0.5; esp.Color3 = Color3.fromRGB(0, 170, 255)
-                end
-                esp.Size = p.Character:GetExtentsSize()
-            end
-        end
+-- [PC 전용] Shift 키로 메뉴 열고 닫기
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.LeftShift then
+        MainFrame.Visible = not MainFrame.Visible
     end
 end)
 
--- 메뉴 버튼
+-- 메뉴 버튼 (모바일용 및 마우스 클릭용)
 local ToggleBtn = Instance.new("ScreenGui", CoreGui)
 local Btn = Instance.new("TextButton", ToggleBtn)
-Btn.Size = UDim2.new(0, 50, 0, 50); Btn.Position = UDim2.new(0, 10, 0.4, 0)
-Btn.Text = "N"; Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Btn.TextColor3 = Color3.new(1,1,1); Btn.Draggable = true
+Btn.Size = UDim2.new(0, 50, 0, 50); Btn.Position = UDim2.new(0, 15, 0.45, 0)
+Btn.Text = "N"; Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Btn.TextColor3 = Color3.new(1,1,1); Btn.Draggable = false
 Instance.new("UICorner", Btn).CornerRadius = UDim.new(1, 0)
 Btn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
