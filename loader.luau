@@ -184,4 +184,3 @@ UserInputService.InputBegan:Connect(function(i, g)
 end)
 
 UI.Pages["Main"].Visible = true; UI.Tabs["Main"].TextColor3 = Color3.fromRGB(0, 255, 150)
-
