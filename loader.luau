@@ -1,4 +1,4 @@
--- [[ Nameless hub | v1 - WallBang & Team Check & ESP Fix ]] --
+-- [[ Nameless hub | v1 - Team Check & Shift Toggle Fix ]] --
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -17,15 +17,14 @@ ScreenGui.Name = "NamelessHub"
 _G.Config = {
     Aimbot = false,
     AutoShoot = false,
-    WallBang = false, -- 벽 뚫기 추가
-    TeamCheck = true, -- 팀 체크 기본 활성화
+    TeamCheck = true, -- 팀 체크 기능 기본 활성화
     ESP = false,
     Noclip = false,
     Fly = false,
     WalkSpeed = 16
 }
 
--- [UI 기본 구조]
+-- [1] UI 메인 프레임
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 480, 0, 350)
 MainFrame.Position = UDim2.new(0.5, -240, 0.5, -175)
@@ -83,59 +82,52 @@ local function CreateSlider(parent, text, min, max, var)
     end)
 end
 
--- [탭 구성]
+-- 탭 구성
 local Combat = CreateTab("Combat"); local Rage = CreateTab("Rage"); local Visuals = CreateTab("Visuals")
-CreateToggle(Combat, "Aimbot", "Aimbot")
-CreateToggle(Combat, "Auto Shoot", "AutoShoot")
+CreateToggle(Combat, "Aimbot (1P Lock)", "Aimbot")
 CreateToggle(Combat, "Team Check", "TeamCheck")
-CreateToggle(Rage, "Wall Bang (Silent)", "WallBang")
+CreateToggle(Combat, "Auto Shoot", "AutoShoot")
 CreateToggle(Rage, "Noclip", "Noclip")
 CreateToggle(Rage, "Fly", "Fly")
 CreateSlider(Rage, "WalkSpeed", 16, 500, "WalkSpeed")
 CreateToggle(Visuals, "ESP (Highlight)", "ESP")
 
--- [에임봇 대상 판별: 팀/시체 제외]
-local function IsValid(p)
-    if p == LocalPlayer then return false end
-    if _G.Config.TeamCheck and p.Team == LocalPlayer.Team then return false end
-    if not p.Character or not p.Character:FindFirstChild("Head") or not p.Character:FindFirstChild("Humanoid") then return false end
-    if p.Character.Humanoid.Health <= 0 then return false end -- 죽은 시체 제외
-    return true
-end
-
+-- [[ 핵심 엔진: 팀 체크 포함 ]] --
 local function GetClosest()
     local t, d = nil, math.huge
     local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     for _, p in pairs(Players:GetPlayers()) do
-        if IsValid(p) then
-            local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
-            if vis or _G.Config.WallBang then -- 벽뚫기 활성 시 시야 밖/벽 뒤도 타겟팅
-                local m = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                if m < d then t = p; d = m end
+        -- 팀 체크 및 생존 여부 확인
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") then
+            if p.Character.Humanoid.Health > 0 and (not _G.Config.TeamCheck or p.Team ~= LocalPlayer.Team) then
+                local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
+                if vis then
+                    local m = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                    if m < d then t = p; d = m end
+                end
             end
         end
     end
     return t
 end
 
--- [핵심 루프]
 RunService.RenderStepped:Connect(function()
-    local target = GetClosest()
-    if _G.Config.Aimbot and target then
-        Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
-    end
-
-    -- 월뱅(Wall Bang) & 오토슛
-    if _G.Config.AutoShoot and target then
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-        task.wait()
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+    if _G.Config.Aimbot then
+        local target = GetClosest()
+        if target and target.Character:FindFirstChild("Head") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+            if _G.Config.AutoShoot then
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                task.wait()
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+            end
+        end
     end
 
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("Humanoid") then
         if _G.Config.WalkSpeed > 16 and char.Humanoid.MoveDirection.Magnitude > 0 then
-            char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 300))
+            char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 280))
         end
         if _G.Config.Fly then char.HumanoidRootPart.Velocity = Vector3.new(0, 2, 0) end
         if _G.Config.Noclip then
@@ -144,39 +136,41 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [ESP 복구: Highlight 방식]
-local function ApplyESP(p)
-    p.CharacterAdded:Connect(function(char)
-        if _G.Config.ESP then
-            local hl = char:FindFirstChild("NamelessESP") or Instance.new("Highlight", char)
-            hl.Name = "NamelessESP"; hl.FillColor = Color3.fromRGB(0, 170, 255); hl.OutlineTransparency = 0
-        end
-    end)
-    if p.Character and _G.Config.ESP then
-        local hl = p.Character:FindFirstChild("NamelessESP") or Instance.new("Highlight", p.Character)
-        hl.Name = "NamelessESP"
-    end
-end
-
-Players.PlayerAdded:Connect(ApplyESP)
-for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then ApplyESP(p) end end
-
-RunService.Heartbeat:Connect(function()
+-- [[ 고성능 Highlight ESP ]] --
+RunService.RenderStepped:Connect(function()
     for _, p in pairs(Players:GetPlayers()) do
-        if p.Character and p.Character:FindFirstChild("NamelessESP") then
-            p.Character.NamelessESP.Enabled = _G.Config.ESP and IsValid(p)
+        if p ~= LocalPlayer and p.Character then
+            local hl = p.Character:FindFirstChild("NamelessESP")
+            if _G.Config.ESP then
+                if not hl then
+                    hl = Instance.new("Highlight")
+                    hl.Name = "NamelessESP"
+                    hl.Parent = p.Character
+                    hl.FillColor = Color3.fromRGB(0, 170, 255)
+                    hl.OutlineColor = Color3.new(1, 1, 1)
+                end
+                -- 팀에 따라 색상 변경 (선택사항)
+                hl.FillColor = (p.Team == LocalPlayer.Team) and Color3.new(0, 1, 0) or Color3.new(1, 0, 0)
+                hl.Enabled = true
+            else
+                if hl then hl.Enabled = false end
+            end
         end
     end
 end)
 
--- [단축키 & 버튼]
+-- [[ Shift 키 토글 ]] --
 UserInputService.InputBegan:Connect(function(input, chat)
-    if not chat and input.KeyCode == Enum.KeyCode.LeftShift then MainFrame.Visible = not MainFrame.Visible end
+    if not chat and input.KeyCode == Enum.KeyCode.LeftShift then
+        MainFrame.Visible = not MainFrame.Visible
+    end
 end)
 
+-- 메뉴 버튼 (모바일 겸용)
 local ToggleBtn = Instance.new("ScreenGui", CoreGui)
-local Btn = Instance.new("TextButton", ToggleBtn); Btn.Size = UDim2.new(0, 50, 0, 50); Btn.Position = UDim2.new(0, 15, 0.45, 0)
-Btn.Text = "N"; Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Btn.TextColor3 = Color3.new(1,1,1)
+local Btn = Instance.new("TextButton", ToggleBtn)
+Btn.Size = UDim2.new(0, 50, 0, 50); Btn.Position = UDim2.new(0, 10, 0.4, 0)
+Btn.Text = "N"; Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Btn.TextColor3 = Color3.new(1,1,1); Btn.Draggable = false
 Instance.new("UICorner", Btn).CornerRadius = UDim.new(1, 0)
 Btn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
