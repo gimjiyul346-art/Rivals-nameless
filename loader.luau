@@ -1,29 +1,29 @@
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [1] 중복 실행 방지 (실행할 때마다 깨끗하게 새로 고침)
+-- [1] 중복 실행 방지
 if CoreGui:FindFirstChild("NamelessHub") then CoreGui.NamelessHub:Destroy() end
 if CoreGui:FindFirstChild("NamelessToggle") then CoreGui.NamelessToggle:Destroy() end
 
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
 ScreenGui.Name = "NamelessHub"
 
--- 전역 설정 테이블 (모든 기능의 ON/OFF 상태 저장)
+-- 설정값 저장용
 _G.Config = {
-    SilentAim = false,
-    Wallbang = false,
+    Aimbot = false, -- 에임봇으로 교체
     ESP = false,
     Noclip = false,
     Fly = false,
     WalkSpeed = 16,
-    AllSkins = false
+    AimbotSmoothness = 0.1 -- 에임봇 부드러움 조절
 }
 
--- [2] 메인 UI 디자인 (v1 고정 레이아웃)
+-- [2] UI 디자인
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 500, 0, 380)
 MainFrame.Position = UDim2.new(0.5, -250, 0.5, -190)
@@ -46,7 +46,6 @@ Instance.new("UIListLayout", TabBar).FillDirection = Enum.FillDirection.Horizont
 
 local UI = { Tabs = {}, Pages = {} }
 
--- 탭 생성 함수
 local function CreateTab(name)
     local btn = Instance.new("TextButton", TabBar)
     btn.Size = UDim2.new(0, 80, 1, 0)
@@ -68,8 +67,7 @@ local function CreateTab(name)
     return Page
 end
 
--- 토글/슬라이더 생성 유틸리티
-local function CreateToggle(parent, text, var, callback)
+local function CreateToggle(parent, text, var)
     local f = Instance.new("TextButton", parent)
     f.Size = UDim2.new(1, -10, 0, 30); f.BackgroundColor3 = Color3.fromRGB(25, 25, 25); f.Text = ""
     local l = Instance.new("TextLabel", f)
@@ -79,15 +77,14 @@ local function CreateToggle(parent, text, var, callback)
     f.MouseButton1Click:Connect(function()
         _G.Config[var] = not _G.Config[var]
         b.BackgroundColor3 = _G.Config[var] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(40, 40, 40)
-        if callback then callback(_G.Config[var]) end
     end)
 end
 
 local function CreateSlider(parent, text, min, max, var)
     local f = Instance.new("Frame", parent); f.Size = UDim2.new(1, -10, 0, 40); f.BackgroundTransparency = 1
-    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.Text = text .. ": " .. min; l.TextColor3 = Color3.fromRGB(200, 200, 200); l.Font = Enum.Font.Code; l.BackgroundTransparency = 1
+    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.Text = text .. ": " .. _G.Config[var]; l.TextColor3 = Color3.fromRGB(200, 200, 200); l.Font = Enum.Font.Code; l.BackgroundTransparency = 1
     local b = Instance.new("TextButton", f); b.Size = UDim2.new(0.9, 0, 0, 4); b.Position = UDim2.new(0.05, 0, 0.7, 0); b.BackgroundColor3 = Color3.fromRGB(40, 40, 40); b.Text = ""
-    local fill = Instance.new("Frame", b); fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 255); fill.BorderSizePixel = 0
+    local fill = Instance.new("Frame", b); fill.Size = UDim2.new((_G.Config[var]-min)/(max-min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 255); fill.BorderSizePixel = 0
     b.MouseButton1Down:Connect(function()
         local m; m = RunService.RenderStepped:Connect(function()
             local p = math.clamp((UserInputService:GetMouseLocation().X - b.AbsolutePosition.X) / b.AbsoluteSize.X, 0, 1)
@@ -98,100 +95,95 @@ local function CreateSlider(parent, text, min, max, var)
     end)
 end
 
--- [3] 탭별 기능 배치 (Rage, Main, ESP, Misc, Settings)
+-- [3] 기능 배치
 local Main = CreateTab("Main")
 local Rage = CreateTab("Rage")
 local ESPTab = CreateTab("ESP")
-local Misc = CreateTab("Misc")
 local Settings = CreateTab("Settings")
 
--- Main
-CreateToggle(Main, "Silent Aim", "SilentAim")
-CreateToggle(Main, "Wallbang", "Wallbang")
-
--- Rage
+CreateToggle(Main, "Aimbot", "Aimbot") -- 사일런트 에임에서 교체
 CreateToggle(Rage, "Noclip", "Noclip")
 CreateToggle(Rage, "Fly Enabled", "Fly")
 CreateSlider(Rage, "WalkSpeed", 16, 500, "WalkSpeed")
-
--- ESP
 CreateToggle(ESPTab, "Box ESP", "ESP")
 
--- Misc
-CreateToggle(Misc, "All Skins Unlock", "AllSkins", function(state)
-    -- 로블록스 일반적인 게임 데이터 구조를 타겟팅 (작동 보장용 로직)
-    if state then
-        local mt = getrawmetatable(game)
-        setreadonly(mt, false)
-        local old = mt.__index
-        mt.__index = newcclosure(function(t, k)
-            if _G.Config.AllSkins and (k == "OwnsItem" or k == "HasPass") then return function() return true end end
-            return old(t, k)
-        end)
-        setreadonly(mt, true)
-    end
-end)
+-- [4] 기능 엔진
 
--- [4] 핵심 작동 엔진 (무조건 작동 모드)
+-- 타겟팅 로직
 local function GetClosest()
-    local target, dist = nil, math.huge
+    local t, d = nil, math.huge
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
             local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
-            if vis or _G.Config.Wallbang then
-                local mag = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                if mag < dist then target = p; dist = mag end
+            if vis then
+                local m = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                if m < d then t = p; d = m end
             end
         end
     end
-    return target
+    return t
 end
 
--- Silent Aim: 레이캐스트 후킹
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
-    if _G.Config.SilentAim and method == "Raycast" and not checkcaller() then
-        local t = GetClosest()
-        if t then
-            args[2] = (t.Character.Head.Position - args[1]).Unit * 1000
-            if _G.Config.Wallbang and args[3] then
-                args[3].FilterDescendantsInstances = {t.Character}
-                args[3].FilterType = Enum.RaycastFilterType.Include
+-- ESP 엔진
+RunService.RenderStepped:Connect(function()
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = p.Character.HumanoidRootPart
+            local esp = p.Character:FindFirstChild("NamelessESP")
+            
+            if _G.Config.ESP then
+                if not esp then
+                    esp = Instance.new("BoxHandleAdornment")
+                    esp.Name = "NamelessESP"
+                    esp.Parent = p.Character
+                    esp.Adornee = hrp
+                    esp.AlwaysOnTop = true
+                    esp.ZIndex = 10
+                    esp.Transparency = 0.5
+                    esp.Color3 = Color3.fromRGB(0, 170, 255)
+                end
+                -- 플레이어 크기에 맞춰 박스 크기 자동 조절
+                esp.Size = p.Character:GetExtentsSize()
+            else
+                if esp then esp:Destroy() end
             end
-            return oldNamecall(self, unpack(args))
         end
     end
-    return oldNamecall(self, ...)
 end)
 
--- 이동 관련 엔진 루프
+-- 에임봇 엔진 (적을 직접 따라가는 방식)
+RunService.RenderStepped:Connect(function()
+    if _G.Config.Aimbot then
+        local target = GetClosest()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            -- Tween을 사용하여 부드럽게 카메라를 타겟 방향으로 회전
+            local lookAt = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+            Camera.CFrame = Camera.CFrame:Lerp(lookAt, _G.Config.AimbotSmoothness)
+        end
+    end
+end)
+
+-- 이동 기능 엔진
 RunService.Stepped:Connect(function()
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("HumanoidRootPart") then
         local hrp = char.HumanoidRootPart
-        -- WalkSpeed (CFrame 기반으로 튕김 방지)
         if _G.Config.WalkSpeed > 16 and char.Humanoid.MoveDirection.Magnitude > 0 then
             hrp.CFrame = hrp.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 100))
         end
-        -- Fly
         if _G.Config.Fly then hrp.Velocity = Vector3.new(0, 2, 0) end
-        -- Noclip
         if _G.Config.Noclip then
             for _, v in pairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
         end
     end
 end)
 
--- [5] 메뉴 토글 버튼
-local ToggleGui = Instance.new("ScreenGui", CoreGui)
-ToggleGui.Name = "NamelessToggle"
-local Btn = Instance.new("TextButton", ToggleGui)
-Btn.Size = UDim2.new(0, 60, 0, 30); Btn.Position = UDim2.new(0, 10, 0.4, 0)
-Btn.Text = "MENU"; Btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Btn.TextColor3 = Color3.fromRGB(0, 170, 255); Btn.Draggable = true
+-- [5] 메뉴 버튼
+local ToggleBtn = Instance.new("ScreenGui", CoreGui)
+ToggleBtn.Name = "NamelessToggle"
+local Btn = Instance.new("TextButton", ToggleBtn)
+Btn.Size = UDim2.new(0, 50, 0, 50); Btn.Position = UDim2.new(0, 10, 0.4, 0)
+Btn.Text = "Menu"; Btn.Draggable = true
 Btn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
--- 초기 탭 설정
 UI.Pages["Main"].Visible = true; UI.Tabs["Main"].TextColor3 = Color3.fromRGB(0, 170, 255)
