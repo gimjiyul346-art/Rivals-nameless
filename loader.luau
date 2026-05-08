@@ -1,4 +1,4 @@
--- [[ Nameless hub | v1 - Final 1P Fix & Slider Recovery ]] --
+-- [[ Nameless hub | v1 - Slider Restored & 1P Aimbot Fix ]] --
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -38,12 +38,12 @@ local UI = { Tabs = {}, Pages = {} }
 
 local function CreateTab(name)
     local btn = Instance.new("TextButton", TabBar)
-    btn.Size = UDim2.new(0, 80, 1, 0); btn.BackgroundTransparency = 1
-    btn.Text = name:lower(); btn.Font = Enum.Font.Code; btn.TextColor3 = Color3.fromRGB(150, 150, 150)
+    btn.Size = UDim2.new(0, 100, 1, 0); btn.BackgroundTransparency = 1
+    btn.Text = name:upper(); btn.Font = Enum.Font.Code; btn.TextColor3 = Color3.fromRGB(150, 150, 150)
     
     local Page = Instance.new("ScrollingFrame", MainFrame)
     Page.Size = UDim2.new(1, -20, 1, -50); Page.Position = UDim2.new(0, 10, 0, 45)
-    Page.BackgroundTransparency = 1; Page.Visible = false; Page.ScrollBarThickness = 2
+    Page.BackgroundTransparency = 1; Page.Visible = false; Page.ScrollBarThickness = 0
     Instance.new("UIListLayout", Page).Padding = UDim.new(0, 8)
     
     btn.MouseButton1Click:Connect(function()
@@ -65,49 +65,33 @@ local function CreateToggle(parent, text, var)
     end)
 end
 
--- [슬라이더 기능 - 가시성 및 작동 보장]
+-- [예전에 잘 됐던 슬라이더 방식 복구]
 local function CreateSlider(parent, text, min, max, var)
-    local sContainer = Instance.new("Frame", parent)
-    sContainer.Size = UDim2.new(1, 0, 0, 50); sContainer.BackgroundTransparency = 1
+    local f = Instance.new("Frame", parent); f.Size = UDim2.new(1, -10, 0, 40); f.BackgroundTransparency = 1
+    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.Text = text .. ": " .. _G.Config[var]; l.TextColor3 = Color3.fromRGB(200, 200, 200); l.Font = Enum.Font.Code; l.BackgroundTransparency = 1; l.TextXAlignment = Enum.TextXAlignment.Left
+    local b = Instance.new("TextButton", f); b.Size = UDim2.new(1, 0, 0, 4); b.Position = UDim2.new(0, 0, 0.7, 0); b.BackgroundColor3 = Color3.fromRGB(40, 40, 40); b.Text = ""
+    local fill = Instance.new("Frame", b); fill.Size = UDim2.new((_G.Config[var]-min)/(max-min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 255); fill.BorderSizePixel = 0
     
-    local label = Instance.new("TextLabel", sContainer)
-    label.Size = UDim2.new(1, 0, 0, 20); label.Text = text .. ": " .. _G.Config[var]; label.TextColor3 = Color3.new(1,1,1)
-    label.BackgroundTransparency = 1; label.Font = Enum.Font.Code; label.TextXAlignment = Enum.TextXAlignment.Left
-
-    local bar = Instance.new("TextButton", sContainer)
-    bar.Size = UDim2.new(1, -10, 0, 6); bar.Position = UDim2.new(0, 0, 0, 25); bar.BackgroundColor3 = Color3.fromRGB(45, 45, 45); bar.Text = ""
-    
-    local fill = Instance.new("Frame", bar)
-    fill.Size = UDim2.new((_G.Config[var] - min)/(max - min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 255); fill.BorderSizePixel = 0
-
-    local function update(input)
-        local pos = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-        fill.Size = UDim2.new(pos, 0, 1, 0)
-        local val = math.floor(min + (max - min) * pos)
-        _G.Config[var] = val
-        label.Text = text .. ": " .. val
-    end
-
-    bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            local con; con = RunService.RenderStepped:Connect(function()
-                update(UserInputService:GetMouseLocation())
-                if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then con:Disconnect() end
-            end)
-        end
+    b.MouseButton1Down:Connect(function()
+        local move; move = RunService.RenderStepped:Connect(function()
+            local p = math.clamp((UserInputService:GetMouseLocation().X - b.AbsolutePosition.X) / b.AbsoluteSize.X, 0, 1)
+            fill.Size = UDim2.new(p, 0, 1, 0); local val = math.floor(min + (max - min) * p)
+            l.Text = text .. ": " .. val; _G.Config[var] = val
+            if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then move:Disconnect() end
+        end)
     end)
 end
 
 -- 탭 구성
 local Combat = CreateTab("Combat"); local Rage = CreateTab("Rage"); local Visuals = CreateTab("Visuals")
-CreateToggle(Combat, "Aimbot (1st Person Fix)", "Aimbot")
+CreateToggle(Combat, "Aimbot (1st Person Lock)", "Aimbot")
 CreateToggle(Combat, "Auto Shoot", "AutoShoot")
 CreateToggle(Rage, "Noclip", "Noclip")
 CreateToggle(Rage, "Fly", "Fly")
-CreateSlider(Rage, "Speed Hack", 16, 500, "WalkSpeed")
+CreateSlider(Rage, "WalkSpeed", 16, 500, "WalkSpeed")
 CreateToggle(Visuals, "Box ESP", "ESP")
 
--- [2] 핵심 엔진 (1인칭 완벽 대응 에임봇)
+-- [[ 핵심 엔진 (1인칭 완벽 대응) ]] --
 local function GetClosest()
     local t, d = nil, math.huge
     for _, p in pairs(Players:GetPlayers()) do
@@ -127,7 +111,6 @@ RunService.RenderStepped:Connect(function()
         local target = GetClosest()
         if target and target.Character:FindFirstChild("Head") then
             local headPos = target.Character.Head.Position
-            -- 1인칭 대응 핵심: 카메라 CFrame을 직접 설정하여 엔진의 마우스 잠금을 무시
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, headPos)
             
             if _G.Config.AutoShoot then
@@ -141,11 +124,11 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- 캐릭터 이동 로직 (속도 핵)
     local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
+    if char and char:FindFirstChild("Humanoid") then
+        -- 속도 적용 로직 강화
         if _G.Config.WalkSpeed > 16 and char.Humanoid.MoveDirection.Magnitude > 0 then
-            char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 100))
+            char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 280))
         end
         if _G.Config.Fly then char.HumanoidRootPart.Velocity = Vector3.new(0, 2, 0) end
         if _G.Config.Noclip then
@@ -154,11 +137,29 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- 메뉴 토글 버튼
+-- ESP 엔진
+RunService.RenderStepped:Connect(function()
+    if _G.Config.ESP then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local esp = p.Character:FindFirstChild("NamelessESP")
+                if not esp then
+                    esp = Instance.new("BoxHandleAdornment", p.Character)
+                    esp.Name = "NamelessESP"; esp.Adornee = p.Character.HumanoidRootPart
+                    esp.AlwaysOnTop = true; esp.ZIndex = 10; esp.Transparency = 0.5; esp.Color3 = Color3.fromRGB(0, 170, 255)
+                end
+                esp.Size = p.Character:GetExtentsSize()
+            end
+        end
+    end
+end)
+
+-- 메뉴 버튼
 local ToggleBtn = Instance.new("ScreenGui", CoreGui)
 local Btn = Instance.new("TextButton", ToggleBtn)
 Btn.Size = UDim2.new(0, 50, 0, 50); Btn.Position = UDim2.new(0, 10, 0.4, 0)
-Btn.Text = "Menu"; Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Btn.Draggable = true
+Btn.Text = "N"; Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Btn.TextColor3 = Color3.new(1,1,1); Btn.Draggable = true
+Instance.new("UICorner", Btn).CornerRadius = UDim.new(1, 0)
 Btn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
 UI.Pages["Combat"].Visible = true; UI.Tabs["Combat"].TextColor3 = Color3.fromRGB(0, 170, 255)
