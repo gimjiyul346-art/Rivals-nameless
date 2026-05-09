@@ -1,4 +1,4 @@
--- [[ Nameless hub | v1 - Slider Restored & 1P Aimbot Fix ]] --
+-- [[ Nameless hub | v1.1 - Fixed UI & Menu Toggle ]] --
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -29,10 +29,11 @@ MainFrame.Size = UDim2.new(0, 480, 0, 350)
 MainFrame.Position = UDim2.new(0.5, -240, 0.5, -175)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 MainFrame.BorderSizePixel = 0; MainFrame.Active = true; MainFrame.Draggable = true
+MainFrame.Visible = true -- 초기 실행 시 보임
 
 local TabBar = Instance.new("Frame", MainFrame)
 TabBar.Size = UDim2.new(1, 0, 0, 35); TabBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-Instance.new("UIListLayout", TabBar).FillDirection = Enum.FillDirection.Horizontal
+local TabList = Instance.new("UIListLayout", TabBar); TabList.FillDirection = Enum.FillDirection.Horizontal
 
 local UI = { Tabs = {}, Pages = {} }
 
@@ -65,7 +66,6 @@ local function CreateToggle(parent, text, var)
     end)
 end
 
--- [예전에 잘 됐던 슬라이더 방식 복구]
 local function CreateSlider(parent, text, min, max, var)
     local f = Instance.new("Frame", parent); f.Size = UDim2.new(1, -10, 0, 40); f.BackgroundTransparency = 1
     local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.Text = text .. ": " .. _G.Config[var]; l.TextColor3 = Color3.fromRGB(200, 200, 200); l.Font = Enum.Font.Code; l.BackgroundTransparency = 1; l.TextXAlignment = Enum.TextXAlignment.Left
@@ -91,7 +91,7 @@ CreateToggle(Rage, "Fly", "Fly")
 CreateSlider(Rage, "WalkSpeed", 16, 500, "WalkSpeed")
 CreateToggle(Visuals, "Box ESP", "ESP")
 
--- [[ 핵심 엔진 (1인칭 완벽 대응) ]] --
+-- [[ 핵심 엔진 ]] --
 local function GetClosest()
     local t, d = nil, math.huge
     for _, p in pairs(Players:GetPlayers()) do
@@ -112,13 +112,11 @@ RunService.RenderStepped:Connect(function()
         if target and target.Character:FindFirstChild("Head") then
             local headPos = target.Character.Head.Position
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, headPos)
-            
             if _G.Config.AutoShoot then
                 local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
                 if onScreen then
                     VirtualInputManager:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, true, game, 1)
-                    task.wait()
-                    VirtualInputManager:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, false, game, 1)
+                    task.wait(); VirtualInputManager:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, false, game, 1)
                 end
             end
         end
@@ -126,7 +124,6 @@ RunService.RenderStepped:Connect(function()
 
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("Humanoid") then
-        -- 속도 적용 로직 강화
         if _G.Config.WalkSpeed > 16 and char.Humanoid.MoveDirection.Magnitude > 0 then
             char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + (char.Humanoid.MoveDirection * (_G.Config.WalkSpeed / 280))
         end
@@ -154,12 +151,28 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- 메뉴 버튼
-local ToggleBtn = Instance.new("ScreenGui", CoreGui)
-local Btn = Instance.new("TextButton", ToggleBtn)
-Btn.Size = UDim2.new(0, 50, 0, 50); Btn.Position = UDim2.new(0, 10, 0.4, 0)
-Btn.Text = "N"; Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Btn.TextColor3 = Color3.new(1,1,1); Btn.Draggable = true
-Instance.new("UICorner", Btn).CornerRadius = UDim.new(1, 0)
-Btn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+-- [[ 고정된 메뉴 버튼 (MENU) ]] --
+local ToggleBtnGui = Instance.new("ScreenGui", CoreGui)
+ToggleBtnGui.Name = "NamelessToggle"
 
-UI.Pages["Combat"].Visible = true; UI.Tabs["Combat"].TextColor3 = Color3.fromRGB(0, 170, 255)
+local Btn = Instance.new("TextButton", ToggleBtnGui)
+Btn.Size = UDim2.new(0, 80, 0, 35) -- 크기 조정
+Btn.Position = UDim2.new(0, 10, 0, 10) -- 좌측 상단 고정
+Btn.Text = "MENU"
+Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Btn.TextColor3 = Color3.fromRGB(0, 170, 255)
+Btn.Font = Enum.Font.CodeBold
+Btn.BorderSizePixel = 0
+Btn.Draggable = false -- 움직이지 않게 고정
+
+local Corner = Instance.new("UICorner", Btn)
+Corner.CornerRadius = UDim.new(0, 5)
+
+-- 토글 기능
+Btn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- 초기 탭 설정
+UI.Pages["Combat"].Visible = true
+UI.Tabs["Combat"].TextColor3 = Color3.fromRGB(0, 170, 255)
